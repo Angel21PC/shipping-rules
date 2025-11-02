@@ -2,7 +2,7 @@
 
 client_id = "18b556f61703aa50ec046532c4c17383"
 name = "shipping-rules"
-application_url = "https://example.com"
+application_url = "https://shipping-rules.onrender.com"
 embedded = true
 
 [build]
@@ -24,4 +24,4 @@ api_version = "2026-01"
 scopes = "read_shipping,write_shipping"
 
 [auth]
-redirect_urls = [ "https://example.com/api/auth" ]
+redirect_urls = [ "https://shipping-rules.onrender.com/api/auth" ]
