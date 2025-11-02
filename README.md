@@ -6,6 +6,35 @@ Rather than cloning this repo, follow the [Quick Start steps](https://github.com
 
 Visit the [`shopify.dev` documentation](https://shopify.dev/docs/api/shopify-app-react-router) for more details on the React Router app package.
 
+## Carrier Service de reglas de envío
+
+Este proyecto ahora incluye un Carrier Service personalizado que devuelve tarifas dinámicas en función de reglas configurables:
+
+- Condiciona por subtotal, peso total del carrito y destino (país, provincia y prefijo postal).
+- Gestiona las reglas desde la página principal de la app (`/app`) con capacidad de crear, editar, activar/desactivar y eliminar.
+- Expone un endpoint seguro en `/api/carrier` que Shopify utiliza al calcular el envío en checkout.
+- Registra o actualiza automáticamente el Carrier Service durante el hook `afterAuth` al instalar la app.
+
+### Configuración necesaria
+
+1. Actualiza los scopes de la app a `read_shipping,write_shipping` en `shopify.app.toml` y en la variable de entorno `SCOPES`.
+2. Asegúrate de que `SHOPIFY_APP_URL` apunte a la URL pública (túnel o dominio) de tu app; el Carrier Service utilizará `<SHOPIFY_APP_URL>/api/carrier` como callback.
+3. Reinstala la app o fuerza un nuevo flujo de login para ejecutar el hook `afterAuth` y registrar el Carrier Service en la tienda.
+
+### Probar las reglas
+
+1. Crea una o varias reglas desde la interfaz de la app.
+2. En la tienda de pruebas, añade productos al carrito y procede al checkout.
+3. Las tarifas que cumplan las condiciones aparecerán como métodos de envío con el nombre y precio definidos en cada regla.
+
+### Pruebas automáticas
+
+Ejecuta la suite de lógica de tarifas (requiere instalar dependencias con `npm install`):
+
+```shell
+npm run test
+```
+
 ## Upgrading from Remix
 
 If you have an existing Remix app that you want to upgrade to React Router, please follow the [upgrade guide](https://github.com/Shopify/shopify-app-template-react-router/wiki/Upgrading-from-Remix).  Otherwise, please follow the quick start guide below.

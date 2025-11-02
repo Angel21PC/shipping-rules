@@ -6,6 +6,7 @@ import {
 } from "@shopify/shopify-app-react-router/server";
 import { PrismaSessionStorage } from "@shopify/shopify-app-session-storage-prisma";
 import prisma from "./db.server";
+import { ensureCarrierService } from "./services/carrier-service.server";
 
 const shopify = shopifyApp({
   apiKey: process.env.SHOPIFY_API_KEY,
@@ -19,6 +20,15 @@ const shopify = shopifyApp({
   ...(process.env.SHOP_CUSTOM_DOMAIN
     ? { customShopDomains: [process.env.SHOP_CUSTOM_DOMAIN] }
     : {}),
+  hooks: {
+    afterAuth: async ({ session }) => {
+      try {
+        await ensureCarrierService(session);
+      } catch (error) {
+        console.error("No se pudo registrar el Carrier Service", error);
+      }
+    },
+  },
 });
 
 export default shopify;

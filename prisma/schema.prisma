@@ -30,3 +30,24 @@ model Session {
   collaborator  Boolean?  @default(false)
   emailVerified Boolean?  @default(false)
 }
+
+model ShippingRule {
+  id                     Int       @id @default(autoincrement())
+  shopDomain             String
+  title                  String
+  minSubtotal            Decimal?
+  maxSubtotal            Decimal?
+  minWeight              Decimal?
+  maxWeight              Decimal?
+  destinationCountry     String?
+  destinationProvince    String?
+  destinationPostalCode  String?
+  rateName               String
+  rateAmountCents        Int
+  carrierServiceCode     String?
+  enabled                Boolean   @default(true)
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
+
+  @@index([shopDomain])
+}
