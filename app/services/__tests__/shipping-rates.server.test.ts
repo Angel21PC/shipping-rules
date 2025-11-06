@@ -100,6 +100,22 @@ describe("calculateCarrierRates", () => {
     expect(rates).toHaveLength(1);
   });
 
+  it("normaliza el código postal y usa zip como alias", () => {
+    const rules: ShippingRuleDTO[] = [
+      {
+        ...baseRule,
+        destinationPostalCode: "03001",
+      },
+    ];
+
+    const payload = buildPayload({
+      destination: { postal_code: undefined, zip: " 03 001 " },
+    });
+    const rates = calculateCarrierRates(payload, rules);
+
+    expect(rates).toHaveLength(1);
+  });
+
   it("descarta reglas desactivadas", () => {
     const rules: ShippingRuleDTO[] = [
       {

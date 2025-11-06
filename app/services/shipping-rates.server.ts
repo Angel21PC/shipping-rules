@@ -10,6 +10,7 @@ export interface CarrierRateAddress {
   province?: string | null;
   province_code?: string | null;
   postal_code?: string | null;
+  zip?: string | null;
 }
 
 export interface CarrierRatePayload {
@@ -41,6 +42,20 @@ interface EvaluationContext {
 }
 
 const gramsToKg = (grams: number) => grams / 1000;
+
+const normalizePostalCode = (value?: string | null) => {
+  if (!value) {
+    return null;
+  }
+
+  const trimmed = value.trim();
+
+  if (!trimmed) {
+    return null;
+  }
+
+  return trimmed.replace(/\s+/g, "").toUpperCase();
+};
 
 export const buildEvaluationContext = (
   payload: CarrierRatePayload,
@@ -76,7 +91,10 @@ export const buildEvaluationContext = (
       destination.province_code?.toUpperCase() ??
       destination.province?.toUpperCase() ??
       null,
-    destinationPostalCode: destination.postal_code?.toUpperCase() ?? null,
+    destinationPostalCode:
+      normalizePostalCode(destination.postal_code) ??
+      normalizePostalCode(destination.zip) ??
+      null,
   };
 };
 
