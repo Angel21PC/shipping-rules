@@ -8,6 +8,7 @@ export interface CarrierRateItem {
 export interface CarrierRateAddress {
   country?: string | null;
   province?: string | null;
+  province_code?: string | null;
   postal_code?: string | null;
 }
 
@@ -71,7 +72,10 @@ export const buildEvaluationContext = (
     weightKg: gramsToKg(totalWeightGrams),
     currency: payload.rate.currency ?? "USD",
     destinationCountry: destination.country?.toUpperCase() ?? null,
-    destinationProvince: destination.province?.toUpperCase() ?? null,
+    destinationProvince:
+      destination.province_code?.toUpperCase() ??
+      destination.province?.toUpperCase() ??
+      null,
     destinationPostalCode: destination.postal_code?.toUpperCase() ?? null,
   };
 };
