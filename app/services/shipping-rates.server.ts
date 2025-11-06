@@ -8,7 +8,9 @@ export interface CarrierRateItem {
 export interface CarrierRateAddress {
   country?: string | null;
   province?: string | null;
+  province_code?: string | null;
   postal_code?: string | null;
+  zip?: string | null;
 }
 
 export interface CarrierRatePayload {
@@ -41,6 +43,20 @@ interface EvaluationContext {
 
 const gramsToKg = (grams: number) => grams / 1000;
 
+const normalizePostalCode = (value?: string | null) => {
+  if (!value) {
+    return null;
+  }
+
+  const trimmed = value.trim();
+
+  if (!trimmed) {
+    return null;
+  }
+
+  return trimmed.replace(/\s+/g, "").toUpperCase();
+};
+
 export const buildEvaluationContext = (
   payload: CarrierRatePayload,
 ): EvaluationContext => {
@@ -71,8 +87,14 @@ export const buildEvaluationContext = (
     weightKg: gramsToKg(totalWeightGrams),
     currency: payload.rate.currency ?? "USD",
     destinationCountry: destination.country?.toUpperCase() ?? null,
-    destinationProvince: destination.province?.toUpperCase() ?? null,
-    destinationPostalCode: destination.postal_code?.toUpperCase() ?? null,
+    destinationProvince:
+      destination.province_code?.toUpperCase() ??
+      destination.province?.toUpperCase() ??
+      null,
+    destinationPostalCode:
+      normalizePostalCode(destination.postal_code) ??
+      normalizePostalCode(destination.zip) ??
+      null,
   };
 };
 
