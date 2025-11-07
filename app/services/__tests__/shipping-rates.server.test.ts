@@ -17,6 +17,8 @@ const baseRule: ShippingRuleDTO = {
   destinationCountry: null,
   destinationProvince: null,
   destinationPostalCode: null,
+  destinationPostalCodeStart: null,
+  destinationPostalCodeEnd: null,
   carrierServiceCode: null,
   enabled: true,
   createdAt: new Date(),
@@ -98,6 +100,51 @@ describe("calculateCarrierRates", () => {
     const rates = calculateCarrierRates(payload, rules);
 
     expect(rates).toHaveLength(1);
+  });
+
+  it("filtra por un rango de códigos postales", () => {
+    const rules: ShippingRuleDTO[] = [
+      {
+        ...baseRule,
+        destinationPostalCodeStart: "28000",
+        destinationPostalCodeEnd: "28999",
+      },
+    ];
+
+    const payload = buildPayload({ destination: { postal_code: "28350" } });
+    const rates = calculateCarrierRates(payload, rules);
+
+    expect(rates).toHaveLength(1);
+  });
+
+  it("permite un único código postal cuando desde y hasta son iguales", () => {
+    const rules: ShippingRuleDTO[] = [
+      {
+        ...baseRule,
+        destinationPostalCodeStart: "08012",
+        destinationPostalCodeEnd: "08012",
+      },
+    ];
+
+    const payload = buildPayload({ destination: { postal_code: "08012" } });
+    const rates = calculateCarrierRates(payload, rules);
+
+    expect(rates).toHaveLength(1);
+  });
+
+  it("descarta reglas cuando el código postal cae fuera del rango", () => {
+    const rules: ShippingRuleDTO[] = [
+      {
+        ...baseRule,
+        destinationPostalCodeStart: "28000",
+        destinationPostalCodeEnd: "28999",
+      },
+    ];
+
+    const payload = buildPayload({ destination: { postal_code: "29500" } });
+    const rates = calculateCarrierRates(payload, rules);
+
+    expect(rates).toHaveLength(0);
   });
 
   it("normaliza el código postal y usa zip como alias", () => {

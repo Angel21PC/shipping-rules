@@ -42,6 +42,8 @@ model ShippingRule {
   destinationCountry     String?
   destinationProvince    String?
   destinationPostalCode  String?
+  destinationPostalCodeStart String?
+  destinationPostalCodeEnd   String?
   rateName               String
   rateAmountCents        Int
   carrierServiceCode     String?

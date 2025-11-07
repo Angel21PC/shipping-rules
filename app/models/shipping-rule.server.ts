@@ -12,6 +12,8 @@ export type ShippingRuleInput = {
   destinationCountry?: string | null;
   destinationProvince?: string | null;
   destinationPostalCode?: string | null;
+  destinationPostalCodeStart?: string | null;
+  destinationPostalCodeEnd?: string | null;
   rateName: string;
   rateAmountCents: number;
   carrierServiceCode?: string | null;
@@ -68,6 +70,8 @@ export async function createShippingRule(
       destinationCountry: input.destinationCountry ?? null,
       destinationProvince: input.destinationProvince ?? null,
       destinationPostalCode: input.destinationPostalCode ?? null,
+      destinationPostalCodeStart: input.destinationPostalCodeStart ?? null,
+      destinationPostalCodeEnd: input.destinationPostalCodeEnd ?? null,
       rateName: input.rateName,
       rateAmountCents: input.rateAmountCents,
       carrierServiceCode: input.carrierServiceCode ?? null,
@@ -103,6 +107,8 @@ export async function updateShippingRule(
       destinationCountry: input.destinationCountry ?? null,
       destinationProvince: input.destinationProvince ?? null,
       destinationPostalCode: input.destinationPostalCode ?? null,
+      destinationPostalCodeStart: input.destinationPostalCodeStart ?? null,
+      destinationPostalCodeEnd: input.destinationPostalCodeEnd ?? null,
       rateName: input.rateName,
       rateAmountCents: input.rateAmountCents,
       carrierServiceCode: input.carrierServiceCode ?? null,

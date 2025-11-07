@@ -63,7 +63,8 @@ type RuleFormValues = {
   maxWeight: string;
   destinationCountry: string;
   destinationProvince: string;
-  destinationPostalCode: string;
+  destinationPostalCodeStart: string;
+  destinationPostalCodeEnd: string;
   carrierServiceCode: string;
   enabled: boolean;
 };
@@ -364,7 +365,8 @@ const getFormValuesFromRule = (
       : "",
   destinationCountry: rule?.destinationCountry ?? "",
   destinationProvince: rule?.destinationProvince ?? "",
-  destinationPostalCode: rule?.destinationPostalCode ?? "",
+  destinationPostalCodeStart: rule?.destinationPostalCodeStart ?? "",
+  destinationPostalCodeEnd: rule?.destinationPostalCodeEnd ?? "",
   carrierServiceCode: rule?.carrierServiceCode ?? "",
   enabled: rule ? rule.enabled : true,
 });
@@ -425,6 +427,81 @@ const sanitizeString = (value: FormDataEntryValue | null) => {
   return trimmed ? trimmed : null;
 };
 
+const normalizePostalInput = (value: FormDataEntryValue | null) => {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  return trimmed.replace(/\s+/g, "").toUpperCase();
+};
+
+const parsePostalCodeRange = (
+  formData: FormData,
+  errors: Record<string, string>,
+) => {
+  const startValue = normalizePostalInput(
+    formData.get("destinationPostalCodeStart"),
+  );
+  const endValue = normalizePostalInput(
+    formData.get("destinationPostalCodeEnd"),
+  );
+
+  if (startValue === null && endValue === null) {
+    return { start: null, end: null };
+  }
+
+  if (startValue === null || endValue === null) {
+    const message = "Completa ambos campos para definir un rango";
+    errors.destinationPostalCodeStart = message;
+    errors.destinationPostalCodeEnd = message;
+    return { start: null, end: null };
+  }
+
+  if (!/^\d+$/.test(startValue)) {
+    errors.destinationPostalCodeStart =
+      "Introduce solo números en el código postal";
+  }
+
+  if (!/^\d+$/.test(endValue)) {
+    errors.destinationPostalCodeEnd =
+      "Introduce solo números en el código postal";
+  }
+
+  if (errors.destinationPostalCodeStart || errors.destinationPostalCodeEnd) {
+    return { start: null, end: null };
+  }
+
+  const startNumber = Number(startValue);
+  const endNumber = Number(endValue);
+
+  if (Number.isNaN(startNumber)) {
+    errors.destinationPostalCodeStart = "Introduce un código válido";
+  }
+
+  if (Number.isNaN(endNumber)) {
+    errors.destinationPostalCodeEnd = "Introduce un código válido";
+  }
+
+  if (errors.destinationPostalCodeStart || errors.destinationPostalCodeEnd) {
+    return { start: null, end: null };
+  }
+
+  if (startNumber > endNumber) {
+    const message =
+      "El código postal 'desde' debe ser menor o igual que 'hasta'";
+    errors.destinationPostalCodeStart = message;
+    errors.destinationPostalCodeEnd = message;
+    return { start: null, end: null };
+  }
+
+  return { start: startValue, end: endValue };
+};
+
 const buildRuleInput = (formData: FormData) => {
   const errors: Record<string, string> = {};
 
@@ -480,9 +557,8 @@ const buildRuleInput = (formData: FormData) => {
   const destinationProvince = sanitizeString(
     formData.get("destinationProvince"),
   )?.toUpperCase() ?? null;
-  const destinationPostalCode = sanitizeString(
-    formData.get("destinationPostalCode"),
-  )?.toUpperCase() ?? null;
+  const { start: destinationPostalCodeStart, end: destinationPostalCodeEnd } =
+    parsePostalCodeRange(formData, errors);
 
   const carrierServiceCode =
     sanitizeString(formData.get("carrierServiceCode")) ?? null;
@@ -502,7 +578,9 @@ const buildRuleInput = (formData: FormData) => {
             maxWeight,
             destinationCountry,
             destinationProvince,
-            destinationPostalCode,
+            destinationPostalCode: null,
+            destinationPostalCodeStart,
+            destinationPostalCodeEnd,
             carrierServiceCode,
             enabled,
           }
@@ -611,6 +689,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       destinationCountry: rule.destinationCountry,
       destinationProvince: rule.destinationProvince,
       destinationPostalCode: rule.destinationPostalCode,
+      destinationPostalCodeStart: rule.destinationPostalCodeStart,
+      destinationPostalCodeEnd: rule.destinationPostalCodeEnd,
       carrierServiceCode: rule.carrierServiceCode,
       enabled,
     });
@@ -627,6 +707,22 @@ const formatAmount = (cents: number) =>
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
+
+const formatPostalRestriction = (rule: ShippingRuleDTO) => {
+  if (rule.destinationPostalCodeStart && rule.destinationPostalCodeEnd) {
+    if (rule.destinationPostalCodeStart === rule.destinationPostalCodeEnd) {
+      return `CP: ${rule.destinationPostalCodeStart}`;
+    }
+
+    return `CP: ${rule.destinationPostalCodeStart} - ${rule.destinationPostalCodeEnd}`;
+  }
+
+  if (rule.destinationPostalCode) {
+    return `CP (prefijo): ${rule.destinationPostalCode}`;
+  }
+
+  return null;
+};
 
 export default function ShippingRulesPage() {
   const { rules } = useLoaderData<typeof loader>();
@@ -693,6 +789,18 @@ export default function ShippingRulesPage() {
   const hasErrors = Boolean(
     actionData?.formError || Object.keys(actionData?.errors ?? {}).length,
   );
+
+  const legacyPostalPrefix =
+    editingRule &&
+    editingRule.destinationPostalCode &&
+    !editingRule.destinationPostalCodeStart &&
+    !editingRule.destinationPostalCodeEnd
+      ? editingRule.destinationPostalCode
+      : null;
+
+  const postalRangeHelpText = legacyPostalPrefix
+    ? `La regla usaba el prefijo ${legacyPostalPrefix}. Define ahora el rango (usa el mismo número en ambos campos para un único código).`
+    : "Introduce el mismo número en ambos campos para un único código.";
 
   const groupedRules = useMemo(() => {
     const groups = new Map<
@@ -832,9 +940,7 @@ export default function ShippingRulesPage() {
                   rule.destinationProvince
                     ? `Provincia/Estado: ${rule.destinationProvince}`
                     : null,
-                  rule.destinationPostalCode
-                    ? `CP: ${rule.destinationPostalCode}`
-                    : null,
+                  formatPostalRestriction(rule),
                 ]
                   .filter(Boolean)
                   .join(" · ") || "Sin restricciones"}
@@ -1057,11 +1163,25 @@ export default function ShippingRulesPage() {
                   onChange={handleTextFieldChange("destinationProvince")}
                   autoComplete="off"
                 />
+              </FormLayout.Group>
+              <FormLayout.Group>
                 <TextField
-                  label="Código postal"
-                  name="destinationPostalCode"
-                  value={formValues.destinationPostalCode}
-                  onChange={handleTextFieldChange("destinationPostalCode")}
+                  label="Código postal desde"
+                  name="destinationPostalCodeStart"
+                  value={formValues.destinationPostalCodeStart}
+                  onChange={handleTextFieldChange("destinationPostalCodeStart")}
+                  error={actionData?.errors?.destinationPostalCodeStart}
+                  helpText={postalRangeHelpText}
+                  inputMode="numeric"
+                  autoComplete="off"
+                />
+                <TextField
+                  label="Código postal hasta"
+                  name="destinationPostalCodeEnd"
+                  value={formValues.destinationPostalCodeEnd}
+                  onChange={handleTextFieldChange("destinationPostalCodeEnd")}
+                  error={actionData?.errors?.destinationPostalCodeEnd}
+                  inputMode="numeric"
                   autoComplete="off"
                 />
               </FormLayout.Group>
