@@ -118,6 +118,7 @@ export const buildEvaluationContext = (
 const matchesRule = (
   rule: ShippingRuleDTO,
   context: EvaluationContext,
+  evaluationTime: Date,
 ): boolean => {
   if (!rule.enabled) {
     return false;
@@ -150,6 +151,14 @@ const matchesRule = (
     rule.destinationProvince &&
     rule.destinationProvince !== context.destinationProvince
   ) {
+    return false;
+  }
+
+  if (rule.validFrom && evaluationTime < rule.validFrom) {
+    return false;
+  }
+
+  if (rule.validUntil && evaluationTime > rule.validUntil) {
     return false;
   }
 
@@ -196,9 +205,10 @@ export const calculateCarrierRates = (
   rules: ShippingRuleDTO[],
 ): CarrierRate[] => {
   const context = buildEvaluationContext(payload);
+  const evaluationTime = new Date();
 
   return rules
-    .filter((rule) => matchesRule(rule, context))
+    .filter((rule) => matchesRule(rule, context, evaluationTime))
     .map((rule) => ({
       service_name: rule.rateName,
       service_code: rule.carrierServiceCode ?? `custom-${rule.id}`,

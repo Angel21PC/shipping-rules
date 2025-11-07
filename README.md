@@ -10,7 +10,7 @@ Visit the [`shopify.dev` documentation](https://shopify.dev/docs/api/shopify-app
 
 Este proyecto ahora incluye un Carrier Service personalizado que devuelve tarifas dinámicas en función de reglas configurables:
 
-- Condiciona por subtotal, peso total del carrito y destino (país, provincia y rangos de códigos postales).
+- Condiciona por subtotal, peso total del carrito, destino (país, provincia y rangos de códigos postales) y rango de fechas de vigencia.
 - Gestiona las reglas desde la página principal de la app (`/app`) con capacidad de crear, editar, activar/desactivar y eliminar.
 - Expone un endpoint seguro en `/api/carrier` que Shopify utiliza al calcular el envío en checkout.
 - Registra o actualiza automáticamente el Carrier Service durante el hook `afterAuth` al instalar la app.

@@ -65,6 +65,8 @@ type RuleFormValues = {
   destinationProvince: string;
   destinationPostalCodeStart: string;
   destinationPostalCodeEnd: string;
+  validFrom: string;
+  validUntil: string;
   carrierServiceCode: string;
   enabled: boolean;
 };
@@ -339,6 +341,9 @@ const buildCountryOptions = () => {
   })).sort((a, b) => a.label.localeCompare(b.label, "es"));
 };
 
+const formatDateInput = (value?: Date | null) =>
+  value ? value.toISOString().slice(0, 10) : "";
+
 const getFormValuesFromRule = (
   rule: ShippingRuleDTO | null,
 ): RuleFormValues => ({
@@ -367,6 +372,8 @@ const getFormValuesFromRule = (
   destinationProvince: rule?.destinationProvince ?? "",
   destinationPostalCodeStart: rule?.destinationPostalCodeStart ?? "",
   destinationPostalCodeEnd: rule?.destinationPostalCodeEnd ?? "",
+  validFrom: formatDateInput(rule?.validFrom ?? null),
+  validUntil: formatDateInput(rule?.validUntil ?? null),
   carrierServiceCode: rule?.carrierServiceCode ?? "",
   enabled: rule ? rule.enabled : true,
 });
@@ -415,6 +422,30 @@ const parseRateAmount = (
   }
 
   return Math.round(parsed * 100);
+};
+
+const parseDateField = (
+  value: FormDataEntryValue | null,
+  fieldName: string,
+  errors: Record<string, string>,
+) => {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const raw = value.trim();
+  if (!raw) {
+    return null;
+  }
+
+  const parsed = new Date(raw);
+
+  if (Number.isNaN(parsed.getTime())) {
+    errors[fieldName] = "Introduce una fecha válida";
+    return null;
+  }
+
+  return parsed;
 };
 
 const sanitizeString = (value: FormDataEntryValue | null) => {
@@ -560,6 +591,19 @@ const buildRuleInput = (formData: FormData) => {
   const { start: destinationPostalCodeStart, end: destinationPostalCodeEnd } =
     parsePostalCodeRange(formData, errors);
 
+  const validFrom = parseDateField(formData.get("validFrom"), "validFrom", errors);
+  const validUntil = parseDateField(
+    formData.get("validUntil"),
+    "validUntil",
+    errors,
+  );
+
+  if (validFrom && validUntil && validFrom > validUntil) {
+    const message = "La fecha fin debe ser posterior o igual a la fecha inicio";
+    errors.validUntil = message;
+    errors.validFrom = message;
+  }
+
   const carrierServiceCode =
     sanitizeString(formData.get("carrierServiceCode")) ?? null;
 
@@ -581,6 +625,8 @@ const buildRuleInput = (formData: FormData) => {
             destinationPostalCode: null,
             destinationPostalCodeStart,
             destinationPostalCodeEnd,
+            validFrom,
+            validUntil,
             carrierServiceCode,
             enabled,
           }
@@ -691,6 +737,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       destinationPostalCode: rule.destinationPostalCode,
       destinationPostalCodeStart: rule.destinationPostalCodeStart,
       destinationPostalCodeEnd: rule.destinationPostalCodeEnd,
+      validFrom: rule.validFrom,
+      validUntil: rule.validUntil,
       carrierServiceCode: rule.carrierServiceCode,
       enabled,
     });
@@ -722,6 +770,26 @@ const formatPostalRestriction = (rule: ShippingRuleDTO) => {
   }
 
   return null;
+};
+
+const formatValidityRange = (rule: ShippingRuleDTO) => {
+  if (!rule.validFrom && !rule.validUntil) {
+    return null;
+  }
+
+  const formatter = new Intl.DateTimeFormat("es-ES", { dateStyle: "short" });
+
+  if (rule.validFrom && rule.validUntil) {
+    return `Vigente del ${formatter.format(
+      rule.validFrom,
+    )} al ${formatter.format(rule.validUntil)}`;
+  }
+
+  if (rule.validFrom) {
+    return `Vigente desde ${formatter.format(rule.validFrom)}`;
+  }
+
+  return `Vigente hasta ${formatter.format(rule.validUntil!)}`;
 };
 
 export default function ShippingRulesPage() {
@@ -941,6 +1009,7 @@ export default function ShippingRulesPage() {
                     ? `Provincia/Estado: ${rule.destinationProvince}`
                     : null,
                   formatPostalRestriction(rule),
+                  formatValidityRange(rule),
                 ]
                   .filter(Boolean)
                   .join(" · ") || "Sin restricciones"}
@@ -1183,6 +1252,24 @@ export default function ShippingRulesPage() {
                   error={actionData?.errors?.destinationPostalCodeEnd}
                   inputMode="numeric"
                   autoComplete="off"
+                />
+              </FormLayout.Group>
+              <FormLayout.Group>
+                <TextField
+                  label="Fecha inicio (opcional)"
+                  name="validFrom"
+                  type="date"
+                  value={formValues.validFrom}
+                  onChange={handleTextFieldChange("validFrom")}
+                  error={actionData?.errors?.validFrom}
+                />
+                <TextField
+                  label="Fecha fin (opcional)"
+                  name="validUntil"
+                  type="date"
+                  value={formValues.validUntil}
+                  onChange={handleTextFieldChange("validUntil")}
+                  error={actionData?.errors?.validUntil}
                 />
               </FormLayout.Group>
               <TextField

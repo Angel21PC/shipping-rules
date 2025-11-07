@@ -44,6 +44,8 @@ model ShippingRule {
   destinationPostalCode  String?
   destinationPostalCodeStart String?
   destinationPostalCodeEnd   String?
+  validFrom               DateTime?
+  validUntil              DateTime?
   rateName               String
   rateAmountCents        Int
   carrierServiceCode     String?

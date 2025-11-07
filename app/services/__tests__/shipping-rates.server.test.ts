@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { calculateCarrierRates } from "../shipping-rates.server";
 import type { ShippingRuleDTO } from "../../models/shipping-rule.server";
@@ -19,6 +19,8 @@ const baseRule: ShippingRuleDTO = {
   destinationPostalCode: null,
   destinationPostalCodeStart: null,
   destinationPostalCodeEnd: null,
+  validFrom: null,
+  validUntil: null,
   carrierServiceCode: null,
   enabled: true,
   createdAt: new Date(),
@@ -163,6 +165,46 @@ describe("calculateCarrierRates", () => {
     expect(rates).toHaveLength(1);
   });
 
+  it("aplica reglas dentro del rango de fechas", () => {
+    const rules: ShippingRuleDTO[] = [
+      {
+        ...baseRule,
+        validFrom: new Date("2025-01-01T00:00:00Z"),
+        validUntil: new Date("2025-01-31T23:59:59Z"),
+      },
+    ];
+
+    const rates = calculateCarrierRates(buildPayload({}), rules);
+
+    expect(rates).toHaveLength(1);
+  });
+
+  it("descarta reglas que aún no han comenzado", () => {
+    const rules: ShippingRuleDTO[] = [
+      {
+        ...baseRule,
+        validFrom: new Date("2025-02-01T00:00:00Z"),
+      },
+    ];
+
+    const rates = calculateCarrierRates(buildPayload({}), rules);
+
+    expect(rates).toHaveLength(0);
+  });
+
+  it("descarta reglas caducadas", () => {
+    const rules: ShippingRuleDTO[] = [
+      {
+        ...baseRule,
+        validUntil: new Date("2024-12-31T23:59:59Z"),
+      },
+    ];
+
+    const rates = calculateCarrierRates(buildPayload({}), rules);
+
+    expect(rates).toHaveLength(0);
+  });
+
   it("descarta reglas desactivadas", () => {
     const rules: ShippingRuleDTO[] = [
       {
@@ -175,4 +217,14 @@ describe("calculateCarrierRates", () => {
 
     expect(rates).toHaveLength(0);
   });
+});
+const FIXED_NOW = new Date("2025-01-15T00:00:00Z");
+
+beforeAll(() => {
+  vi.useFakeTimers();
+  vi.setSystemTime(FIXED_NOW);
+});
+
+afterAll(() => {
+  vi.useRealTimers();
 });
