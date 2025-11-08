@@ -959,6 +959,31 @@ export default function ShippingRulesPage() {
     setFormValues(getFormValuesFromRule(null));
   }, []);
 
+  const groupedRules = useMemo(() => {
+    const groups = new Map<
+      string,
+      { key: string; label: string; rules: ShippingRuleDTO[] }
+    >();
+
+    rules.forEach((rule) => {
+      const code = rule.destinationCountry?.toUpperCase() ?? "";
+      const key = code || "__none__";
+      const label = code
+        ? countryLabelMap.get(code) ?? code
+        : "Sin país específico";
+
+      if (!groups.has(key)) {
+        groups.set(key, { key, label, rules: [] });
+      }
+
+      groups.get(key)!.rules.push(rule);
+    });
+
+    return Array.from(groups.values()).sort((a, b) =>
+      a.label.localeCompare(b.label, "es"),
+    );
+  }, [rules, countryLabelMap]);
+
   const selectedIdsArray = useMemo(
     () => Array.from(selectedRuleIds),
     [selectedRuleIds],
@@ -1032,31 +1057,6 @@ export default function ShippingRulesPage() {
   const postalRangeHelpText = legacyPostalPrefix
     ? `La regla usaba el prefijo ${legacyPostalPrefix}. Define ahora el rango (usa el mismo número en ambos campos para un único código).`
     : "Introduce el mismo número en ambos campos para un único código.";
-
-  const groupedRules = useMemo(() => {
-    const groups = new Map<
-      string,
-      { key: string; label: string; rules: ShippingRuleDTO[] }
-    >();
-
-    rules.forEach((rule) => {
-      const code = rule.destinationCountry?.toUpperCase() ?? "";
-      const key = code || "__none__";
-      const label = code
-        ? countryLabelMap.get(code) ?? code
-        : "Sin país específico";
-
-      if (!groups.has(key)) {
-        groups.set(key, { key, label, rules: [] });
-      }
-
-      groups.get(key)!.rules.push(rule);
-    });
-
-    return Array.from(groups.values()).sort((a, b) =>
-      a.label.localeCompare(b.label, "es"),
-    );
-  }, [rules, countryLabelMap]);
 
   useEffect(() => {
     setSelectedGroupIndex((current) => {
