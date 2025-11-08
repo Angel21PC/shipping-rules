@@ -135,3 +135,54 @@ export async function deleteShippingRule(id: number, shopDomain: string) {
 
   return deleted.count > 0;
 }
+
+const toIdArray = (ids: number[]) => ids.filter((id) => Number.isInteger(id));
+
+export async function bulkSetRuleEnabled(
+  ids: number[],
+  shopDomain: string,
+  enabled: boolean,
+) {
+  const validIds = toIdArray(ids);
+  if (!validIds.length) {
+    return 0;
+  }
+
+  const result = await prisma.shippingRule.updateMany({
+    where: { id: { in: validIds }, shopDomain },
+    data: { enabled },
+  });
+
+  return result.count;
+}
+
+export async function bulkSetRuleCombinable(
+  ids: number[],
+  shopDomain: string,
+  combinable: boolean,
+) {
+  const validIds = toIdArray(ids);
+  if (!validIds.length) {
+    return 0;
+  }
+
+  const result = await prisma.shippingRule.updateMany({
+    where: { id: { in: validIds }, shopDomain },
+    data: { combinable },
+  });
+
+  return result.count;
+}
+
+export async function bulkDeleteRules(ids: number[], shopDomain: string) {
+  const validIds = toIdArray(ids);
+  if (!validIds.length) {
+    return 0;
+  }
+
+  const result = await prisma.shippingRule.deleteMany({
+    where: { id: { in: validIds }, shopDomain },
+  });
+
+  return result.count;
+}

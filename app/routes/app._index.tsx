@@ -39,6 +39,9 @@ import {
   deleteShippingRule,
   getShippingRule,
   listShippingRules,
+  bulkSetRuleEnabled,
+  bulkSetRuleCombinable,
+  bulkDeleteRules,
   updateShippingRule,
   type ShippingRuleDTO,
 } from "../models/shipping-rule.server";
@@ -462,6 +465,19 @@ const parseDateField = (
   return parsed;
 };
 
+const parseSelectedIds = (value: FormDataEntryValue | null) => {
+  if (typeof value !== "string") {
+    return [];
+  }
+
+  return value
+    .split(",")
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0)
+    .map((part) => Number(part))
+    .filter((id) => Number.isInteger(id));
+};
+
 const sanitizeString = (value: FormDataEntryValue | null) => {
   if (typeof value !== "string") {
     return null;
@@ -763,6 +779,39 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return redirect(request.url);
   }
 
+  if (intent === "bulkSetEnabled" || intent === "bulkSetCombinable") {
+    const ids = parseSelectedIds(formData.get("selectedIds"));
+    if (!ids.length) {
+      const payload: ActionData = {
+        formError: "Selecciona al menos una tarifa para aplicar la acción masiva",
+      };
+      return Response.json(payload, { status: 400 });
+    }
+
+    const value = formData.get("value") === "true";
+
+    if (intent === "bulkSetEnabled") {
+      await bulkSetRuleEnabled(ids, shopDomain, value);
+    } else {
+      await bulkSetRuleCombinable(ids, shopDomain, value);
+    }
+
+    return redirect(request.url);
+  }
+
+  if (intent === "bulkDelete") {
+    const ids = parseSelectedIds(formData.get("selectedIds"));
+    if (!ids.length) {
+      const payload: ActionData = {
+        formError: "Selecciona al menos una tarifa para eliminar",
+      };
+      return Response.json(payload, { status: 400 });
+    }
+
+    await bulkDeleteRules(ids, shopDomain);
+    return redirect(request.url);
+  }
+
   if (intent === "toggleCombinable") {
     const id = Number(formData.get("id"));
     const combinableValue = formData.get("combinable");
@@ -864,8 +913,12 @@ export default function ShippingRulesPage() {
   );
   const [shouldCloseAfterSubmit, setShouldCloseAfterSubmit] = useState(false);
   const [selectedGroupIndex, setSelectedGroupIndex] = useState(0);
+  const [selectedRuleIds, setSelectedRuleIds] = useState<Set<number>>(
+    () => new Set(),
+  );
   const deleteFetcher = useFetcher<typeof action>();
   const toggleFetcher = useFetcher<typeof action>();
+  const bulkFetcher = useFetcher<typeof action>();
   const combinableFetcher = useFetcher<typeof action>();
   const countryOptions = useMemo(
     () => [
@@ -893,26 +946,6 @@ export default function ShippingRulesPage() {
     [],
   );
 
-  const handleEnabledChange = useCallback(
-    (newChecked: boolean, _id: string) => {
-      setFormValues((prev) => ({
-        ...prev,
-        enabled: newChecked,
-      }));
-    },
-    [],
-  );
-
-  const handleCombinableChange = useCallback(
-    (newChecked: boolean, _id: string) => {
-      setFormValues((prev) => ({
-        ...prev,
-        combinable: newChecked,
-      }));
-    },
-    [],
-  );
-
   const handleOpenModal = (rule: ShippingRuleDTO | null) => {
     setEditingRule(rule);
     setFormValues(getFormValuesFromRule(rule));
@@ -926,6 +959,46 @@ export default function ShippingRulesPage() {
     setFormValues(getFormValuesFromRule(null));
   }, []);
 
+  const selectedIdsArray = useMemo(
+    () => Array.from(selectedRuleIds),
+    [selectedRuleIds],
+  );
+  const hasSelection = selectedIdsArray.length > 0;
+  const bulkSelectionValue = selectedIdsArray.join(",");
+
+  const handleRuleSelectionChange = useCallback(
+    (ruleId: number, selected: boolean) => {
+      setSelectedRuleIds((prev) => {
+        const next = new Set(prev);
+        if (selected) {
+          next.add(ruleId);
+        } else {
+          next.delete(ruleId);
+        }
+        return next;
+      });
+    },
+    [],
+  );
+
+  const handleSelectAllVisible = useCallback(() => {
+    if (!groupedRules[selectedGroupIndex]) {
+      return;
+    }
+
+    setSelectedRuleIds((prev) => {
+      const next = new Set(prev);
+      groupedRules[selectedGroupIndex]?.rules.forEach((rule) =>
+        next.add(rule.id),
+      );
+      return next;
+    });
+  }, [groupedRules, selectedGroupIndex]);
+
+  const handleClearSelection = useCallback(() => {
+    setSelectedRuleIds(new Set());
+  }, []);
+
   const isSubmitting = navigation.state === "submitting";
 
   useEffect(() => {
@@ -937,6 +1010,12 @@ export default function ShippingRulesPage() {
       handleCloseModal();
     }
   }, [handleCloseModal, navigation.state, shouldCloseAfterSubmit]);
+
+  useEffect(() => {
+    if (navigation.state === "loading" && hasSelection) {
+      setSelectedRuleIds(new Set());
+    }
+  }, [hasSelection, navigation.state]);
 
   const hasErrors = Boolean(
     actionData?.formError || Object.keys(actionData?.errors ?? {}).length,
@@ -1004,6 +1083,75 @@ export default function ShippingRulesPage() {
   }, []);
 
   const selectedGroup = groupedRules[selectedGroupIndex] ?? null;
+  const bulkActionDisabled =
+    !hasSelection || bulkFetcher.state === "submitting";
+  const selectionCountLabel =
+    selectedIdsArray.length === 1
+      ? "1 tarifa seleccionada"
+      : `${selectedIdsArray.length} tarifas seleccionadas`;
+
+  const bulkActionsMarkup = hasSelection ? (
+    <Card>
+      <BlockStack gap="200">
+        <InlineStack align="space-between" blockAlign="center" gap="200">
+          <Text>{selectionCountLabel}</Text>
+          <InlineStack gap="200">
+            <Button
+              onClick={handleSelectAllVisible}
+              disabled={!selectedGroup || bulkFetcher.state === "submitting"}
+            >
+              Seleccionar grupo actual
+            </Button>
+            <Button onClick={handleClearSelection}>Limpiar selección</Button>
+          </InlineStack>
+        </InlineStack>
+        <InlineStack gap="200">
+          <bulkFetcher.Form method="post">
+            <input type="hidden" name="intent" value="bulkSetEnabled" />
+            <input type="hidden" name="selectedIds" value={bulkSelectionValue} />
+            <input type="hidden" name="value" value="true" />
+            <Button submit disabled={bulkActionDisabled}>
+              Activar seleccionadas
+            </Button>
+          </bulkFetcher.Form>
+          <bulkFetcher.Form method="post">
+            <input type="hidden" name="intent" value="bulkSetEnabled" />
+            <input type="hidden" name="selectedIds" value={bulkSelectionValue} />
+            <input type="hidden" name="value" value="false" />
+            <Button submit disabled={bulkActionDisabled}>
+              Desactivar seleccionadas
+            </Button>
+          </bulkFetcher.Form>
+          <bulkFetcher.Form method="post">
+            <input type="hidden" name="intent" value="bulkSetCombinable" />
+            <input type="hidden" name="selectedIds" value={bulkSelectionValue} />
+            <input type="hidden" name="value" value="true" />
+            <Button submit disabled={bulkActionDisabled}>
+              Marcar como combinables
+            </Button>
+          </bulkFetcher.Form>
+          <bulkFetcher.Form
+            method="post"
+            onSubmit={(event) => {
+              if (
+                !window.confirm(
+                  `¿Eliminar ${selectionCountLabel.toLowerCase()}? Esta acción es irreversible.`,
+                )
+              ) {
+                event.preventDefault();
+              }
+            }}
+          >
+            <input type="hidden" name="intent" value="bulkDelete" />
+            <input type="hidden" name="selectedIds" value={bulkSelectionValue} />
+            <Button submit tone="critical" disabled={bulkActionDisabled}>
+              Eliminar seleccionadas
+            </Button>
+          </bulkFetcher.Form>
+        </InlineStack>
+      </BlockStack>
+    </Card>
+  ) : null;
 
   const emptyStateMarkup = (
     <EmptyState
@@ -1030,9 +1178,19 @@ export default function ShippingRulesPage() {
           <Card key={rule.id}>
             <BlockStack gap="400">
               <InlineStack align="space-between" blockAlign="center">
-                <Text as="h3" variant="headingMd">
-                  {rule.title}
-                </Text>
+                <InlineStack gap="200" blockAlign="center">
+                  <Checkbox
+                    label="Seleccionar tarifa"
+                    labelHidden
+                    checked={selectedRuleIds.has(rule.id)}
+                    onChange={(checked) =>
+                      handleRuleSelectionChange(rule.id, checked)
+                    }
+                  />
+                  <Text as="h3" variant="headingMd">
+                    {rule.title}
+                  </Text>
+                </InlineStack>
                 <Badge tone={rule.enabled ? "success" : "critical"}>
                   {rule.enabled ? "Activa" : "Inactiva"}
                 </Badge>
@@ -1176,6 +1334,7 @@ export default function ShippingRulesPage() {
                   onSelect={handleTabChange}
                 />
               ) : null}
+              {bulkActionsMarkup}
               {rulesMarkup
                 ? (
                     <div
@@ -1374,18 +1533,15 @@ export default function ShippingRulesPage() {
                 placeholder="Opcional, visible en Shopify"
                 autoComplete="off"
               />
-              <Checkbox
-                label="Regla activa"
+              <input
+                type="hidden"
                 name="enabled"
-                checked={formValues.enabled}
-                onChange={handleEnabledChange}
+                value={String(formValues.enabled)}
               />
-              <Checkbox
-                label="Tarifa combinable"
+              <input
+                type="hidden"
                 name="combinable"
-                checked={formValues.combinable}
-                onChange={handleCombinableChange}
-                helpText="Marca esta casilla si esta tarifa puede mostrarse junto a otras."
+                value={String(formValues.combinable)}
               />
               {hasErrors && (
                 <Banner tone="critical">
