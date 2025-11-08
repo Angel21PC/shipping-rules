@@ -818,6 +818,7 @@ export default function ShippingRulesPage() {
   const [formValues, setFormValues] = useState<RuleFormValues>(() =>
     getFormValuesFromRule(null),
   );
+  const [shouldCloseAfterSubmit, setShouldCloseAfterSubmit] = useState(false);
   const [selectedGroupIndex, setSelectedGroupIndex] = useState(0);
   const deleteFetcher = useFetcher<typeof action>();
   const toggleFetcher = useFetcher<typeof action>();
@@ -869,17 +870,28 @@ export default function ShippingRulesPage() {
 
   const isSubmitting = navigation.state === "submitting";
 
+  useEffect(() => {
+    if (!shouldCloseAfterSubmit) {
+      return;
+    }
+
+    if (navigation.state === "loading") {
+      handleCloseModal();
+    }
+  }, [handleCloseModal, navigation.state, shouldCloseAfterSubmit]);
+
   const handleOpenModal = (rule: ShippingRuleDTO | null) => {
     setEditingRule(rule);
     setFormValues(getFormValuesFromRule(rule));
     setIsModalOpen(true);
   };
 
-  const handleCloseModal = () => {
+  const handleCloseModal = useCallback(() => {
+    setShouldCloseAfterSubmit(false);
     setEditingRule(null);
     setIsModalOpen(false);
     setFormValues(getFormValuesFromRule(null));
-  };
+  }, []);
 
   const hasErrors = Boolean(
     actionData?.formError || Object.keys(actionData?.errors ?? {}).length,
@@ -1131,11 +1143,12 @@ export default function ShippingRulesPage() {
           content: editingRule ? "Guardar cambios" : "Crear regla",
           onAction: () => {
             // This is a bit of a hack to submit the form from outside
-            const form = document.getElementById("rule-form");
+            const form = document.getElementById("rule-form") as
+              | HTMLFormElement
+              | null;
             if (form) {
-              form.dispatchEvent(
-                new Event("submit", { cancelable: true, bubbles: true }),
-              );
+              form.requestSubmit();
+              setShouldCloseAfterSubmit(true);
             }
           },
           loading: isSubmitting,
@@ -1148,13 +1161,7 @@ export default function ShippingRulesPage() {
         ]}
       >
         <Modal.Section>
-          <Form
-            method="post"
-            id="rule-form"
-            onSubmit={() => {
-              handleCloseModal();
-            }}
-          >
+          <Form method="post" id="rule-form">
             <FormLayout>
               {actionData?.formError && (
                 <Banner tone="critical">{actionData.formError}</Banner>
