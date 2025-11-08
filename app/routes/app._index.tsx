@@ -968,6 +968,10 @@ export default function ShippingRulesPage() {
   );
 
   const handleOpenModal = (rule: ShippingRuleDTO | null) => {
+    if (!rule && searchQuery) {
+      setSearchQuery("");
+    }
+
     setEditingRule(rule);
     setFormValues(getFormValuesFromRule(rule));
     setIsModalOpen(true);
