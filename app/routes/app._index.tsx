@@ -429,6 +429,15 @@ const parseRateAmount = (
   return Math.round(parsed * 100);
 };
 
+const parseCheckboxField = (value: FormDataEntryValue | null) => {
+  if (typeof value !== "string") {
+    return false;
+  }
+
+  const normalized = value.toLowerCase();
+  return normalized === "on" || normalized === "true" || normalized === "1";
+};
+
 const parseDateField = (
   value: FormDataEntryValue | null,
   fieldName: string,
@@ -596,7 +605,7 @@ const buildRuleInput = (formData: FormData) => {
   const { start: destinationPostalCodeStart, end: destinationPostalCodeEnd } =
     parsePostalCodeRange(formData, errors);
 
-  const combinable = formData.get("combinable") === "on";
+  const combinable = parseCheckboxField(formData.get("combinable"));
   const validFrom = parseDateField(formData.get("validFrom"), "validFrom", errors);
   const validUntil = parseDateField(
     formData.get("validUntil"),
@@ -613,7 +622,7 @@ const buildRuleInput = (formData: FormData) => {
   const carrierServiceCode =
     sanitizeString(formData.get("carrierServiceCode")) ?? null;
 
-  const enabled = formData.get("enabled") === "on";
+  const enabled = parseCheckboxField(formData.get("enabled"));
 
   return {
     data:
