@@ -19,6 +19,7 @@ const baseRule: ShippingRuleDTO = {
   destinationPostalCode: null,
   destinationPostalCodeStart: null,
   destinationPostalCodeEnd: null,
+  combinable: false,
   validFrom: null,
   validUntil: null,
   carrierServiceCode: null,
@@ -216,6 +217,54 @@ describe("calculateCarrierRates", () => {
     const rates = calculateCarrierRates(buildPayload({}), rules);
 
     expect(rates).toHaveLength(0);
+  });
+
+  it("devuelve múltiples reglas cuando todas son combinables", () => {
+    const rules: ShippingRuleDTO[] = [
+      {
+        ...baseRule,
+        id: 1,
+        title: "Combinable 1",
+        rateName: "C1",
+        combinable: true,
+      },
+      {
+        ...baseRule,
+        id: 2,
+        title: "Combinable 2",
+        rateName: "C2",
+        combinable: true,
+      },
+    ];
+
+    const rates = calculateCarrierRates(buildPayload({}), rules);
+
+    expect(rates).toHaveLength(2);
+    expect(rates.map((rate) => rate.service_name)).toEqual(["C1", "C2"]);
+  });
+
+  it("prioriza la primera regla no combinable", () => {
+    const rules: ShippingRuleDTO[] = [
+      {
+        ...baseRule,
+        id: 1,
+        title: "Exclusiva",
+        rateName: "Exclusiva",
+        combinable: false,
+      },
+      {
+        ...baseRule,
+        id: 2,
+        title: "Combinable",
+        rateName: "Combinable",
+        combinable: true,
+      },
+    ];
+
+    const rates = calculateCarrierRates(buildPayload({}), rules);
+
+    expect(rates).toHaveLength(1);
+    expect(rates[0].service_name).toBe("Exclusiva");
   });
 });
 const FIXED_NOW = new Date("2025-01-15T00:00:00Z");

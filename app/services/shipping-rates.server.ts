@@ -207,13 +207,20 @@ export const calculateCarrierRates = (
   const context = buildEvaluationContext(payload);
   const evaluationTime = new Date();
 
-  return rules
-    .filter((rule) => matchesRule(rule, context, evaluationTime))
-    .map((rule) => ({
-      service_name: rule.rateName,
-      service_code: rule.carrierServiceCode ?? `custom-${rule.id}`,
-      total_price: rule.rateAmountCents.toString(),
-      currency: context.currency,
-      phone_required: false,
-    }));
+  const matchingRules = rules.filter((rule) =>
+    matchesRule(rule, context, evaluationTime),
+  );
+
+  const nonCombinableRule = matchingRules.find((rule) => !rule.combinable);
+  const applicableRules = nonCombinableRule
+    ? [nonCombinableRule]
+    : matchingRules;
+
+  return applicableRules.map((rule) => ({
+    service_name: rule.rateName,
+    service_code: rule.carrierServiceCode ?? `custom-${rule.id}`,
+    total_price: rule.rateAmountCents.toString(),
+    currency: context.currency,
+    phone_required: false,
+  }));
 };

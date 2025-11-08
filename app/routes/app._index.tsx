@@ -68,10 +68,14 @@ type RuleFormValues = {
   validFrom: string;
   validUntil: string;
   carrierServiceCode: string;
+  combinable: boolean;
   enabled: boolean;
 };
 
-type RuleFormTextFieldKey = Exclude<keyof RuleFormValues, "enabled">;
+type RuleFormTextFieldKey = Exclude<
+  keyof RuleFormValues,
+  "enabled" | "combinable"
+>;
 
 const COUNTRY_CODES = [
   "AF",
@@ -375,6 +379,7 @@ const getFormValuesFromRule = (
   validFrom: formatDateInput(rule?.validFrom ?? null),
   validUntil: formatDateInput(rule?.validUntil ?? null),
   carrierServiceCode: rule?.carrierServiceCode ?? "",
+  combinable: rule?.combinable ?? false,
   enabled: rule ? rule.enabled : true,
 });
 
@@ -591,6 +596,7 @@ const buildRuleInput = (formData: FormData) => {
   const { start: destinationPostalCodeStart, end: destinationPostalCodeEnd } =
     parsePostalCodeRange(formData, errors);
 
+  const combinable = formData.get("combinable") === "on";
   const validFrom = parseDateField(formData.get("validFrom"), "validFrom", errors);
   const validUntil = parseDateField(
     formData.get("validUntil"),
@@ -625,6 +631,7 @@ const buildRuleInput = (formData: FormData) => {
             destinationPostalCode: null,
             destinationPostalCodeStart,
             destinationPostalCodeEnd,
+            combinable,
             validFrom,
             validUntil,
             carrierServiceCode,
@@ -737,6 +744,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       destinationPostalCode: rule.destinationPostalCode,
       destinationPostalCodeStart: rule.destinationPostalCodeStart,
       destinationPostalCodeEnd: rule.destinationPostalCodeEnd,
+      combinable: rule.combinable,
       validFrom: rule.validFrom,
       validUntil: rule.validUntil,
       carrierServiceCode: rule.carrierServiceCode,
@@ -835,6 +843,16 @@ export default function ShippingRulesPage() {
       setFormValues((prev) => ({
         ...prev,
         enabled: newChecked,
+      }));
+    },
+    [],
+  );
+
+  const handleCombinableChange = useCallback(
+    (newChecked: boolean, _id: string) => {
+      setFormValues((prev) => ({
+        ...prev,
+        combinable: newChecked,
       }));
     },
     [],
@@ -1009,6 +1027,7 @@ export default function ShippingRulesPage() {
                     ? `Provincia/Estado: ${rule.destinationProvince}`
                     : null,
                   formatPostalRestriction(rule),
+                  rule.combinable ? "Tarifa combinable" : "Tarifa no combinable",
                   formatValidityRange(rule),
                 ]
                   .filter(Boolean)
@@ -1285,6 +1304,13 @@ export default function ShippingRulesPage() {
                 name="enabled"
                 checked={formValues.enabled}
                 onChange={handleEnabledChange}
+              />
+              <Checkbox
+                label="Tarifa combinable"
+                name="combinable"
+                checked={formValues.combinable}
+                onChange={handleCombinableChange}
+                helpText="Marca esta casilla si esta tarifa puede mostrarse junto a otras."
               />
               {hasErrors && (
                 <Banner tone="critical">

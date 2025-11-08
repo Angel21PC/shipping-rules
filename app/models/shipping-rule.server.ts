@@ -14,6 +14,7 @@ export type ShippingRuleInput = {
   destinationPostalCode?: string | null;
   destinationPostalCodeStart?: string | null;
   destinationPostalCodeEnd?: string | null;
+  combinable?: boolean;
   validFrom?: Date | string | null;
   validUntil?: Date | string | null;
   rateName: string;
@@ -79,6 +80,7 @@ export async function createShippingRule(
       rateName: input.rateName,
       rateAmountCents: input.rateAmountCents,
       carrierServiceCode: input.carrierServiceCode ?? null,
+      combinable: input.combinable ?? false,
       enabled: input.enabled ?? true,
     },
   });
@@ -118,6 +120,7 @@ export async function updateShippingRule(
       rateName: input.rateName,
       rateAmountCents: input.rateAmountCents,
       carrierServiceCode: input.carrierServiceCode ?? null,
+      combinable: input.combinable ?? false,
       enabled: input.enabled ?? true,
     },
   });
