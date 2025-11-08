@@ -39,6 +39,9 @@ import {
   deleteShippingRule,
   getShippingRule,
   listShippingRules,
+  bulkSetRuleEnabled,
+  bulkSetRuleCombinable,
+  bulkDeleteRules,
   updateShippingRule,
   type ShippingRuleDTO,
 } from "../models/shipping-rule.server";
@@ -63,12 +66,19 @@ type RuleFormValues = {
   maxWeight: string;
   destinationCountry: string;
   destinationProvince: string;
-  destinationPostalCode: string;
+  destinationPostalCodeStart: string;
+  destinationPostalCodeEnd: string;
+  validFrom: string;
+  validUntil: string;
   carrierServiceCode: string;
+  combinable: boolean;
   enabled: boolean;
 };
 
-type RuleFormTextFieldKey = Exclude<keyof RuleFormValues, "enabled">;
+type RuleFormTextFieldKey = Exclude<
+  keyof RuleFormValues,
+  "enabled" | "combinable"
+>;
 
 const COUNTRY_CODES = [
   "AF",
@@ -338,6 +348,9 @@ const buildCountryOptions = () => {
   })).sort((a, b) => a.label.localeCompare(b.label, "es"));
 };
 
+const formatDateInput = (value?: Date | null) =>
+  value ? value.toISOString().slice(0, 10) : "";
+
 const getFormValuesFromRule = (
   rule: ShippingRuleDTO | null,
 ): RuleFormValues => ({
@@ -364,8 +377,12 @@ const getFormValuesFromRule = (
       : "",
   destinationCountry: rule?.destinationCountry ?? "",
   destinationProvince: rule?.destinationProvince ?? "",
-  destinationPostalCode: rule?.destinationPostalCode ?? "",
+  destinationPostalCodeStart: rule?.destinationPostalCodeStart ?? "",
+  destinationPostalCodeEnd: rule?.destinationPostalCodeEnd ?? "",
+  validFrom: formatDateInput(rule?.validFrom ?? null),
+  validUntil: formatDateInput(rule?.validUntil ?? null),
   carrierServiceCode: rule?.carrierServiceCode ?? "",
+  combinable: rule?.combinable ?? false,
   enabled: rule ? rule.enabled : true,
 });
 
@@ -415,6 +432,52 @@ const parseRateAmount = (
   return Math.round(parsed * 100);
 };
 
+const parseCheckboxField = (value: FormDataEntryValue | null) => {
+  if (typeof value !== "string") {
+    return false;
+  }
+
+  const normalized = value.toLowerCase();
+  return normalized === "on" || normalized === "true" || normalized === "1";
+};
+
+const parseDateField = (
+  value: FormDataEntryValue | null,
+  fieldName: string,
+  errors: Record<string, string>,
+) => {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const raw = value.trim();
+  if (!raw) {
+    return null;
+  }
+
+  const parsed = new Date(raw);
+
+  if (Number.isNaN(parsed.getTime())) {
+    errors[fieldName] = "Introduce una fecha válida";
+    return null;
+  }
+
+  return parsed;
+};
+
+const parseSelectedIds = (value: FormDataEntryValue | null) => {
+  if (typeof value !== "string") {
+    return [];
+  }
+
+  return value
+    .split(",")
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0)
+    .map((part) => Number(part))
+    .filter((id) => Number.isInteger(id));
+};
+
 const sanitizeString = (value: FormDataEntryValue | null) => {
   if (typeof value !== "string") {
     return null;
@@ -423,6 +486,81 @@ const sanitizeString = (value: FormDataEntryValue | null) => {
   const trimmed = value.trim();
 
   return trimmed ? trimmed : null;
+};
+
+const normalizePostalInput = (value: FormDataEntryValue | null) => {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  return trimmed.replace(/\s+/g, "").toUpperCase();
+};
+
+const parsePostalCodeRange = (
+  formData: FormData,
+  errors: Record<string, string>,
+) => {
+  const startValue = normalizePostalInput(
+    formData.get("destinationPostalCodeStart"),
+  );
+  const endValue = normalizePostalInput(
+    formData.get("destinationPostalCodeEnd"),
+  );
+
+  if (startValue === null && endValue === null) {
+    return { start: null, end: null };
+  }
+
+  if (startValue === null || endValue === null) {
+    const message = "Completa ambos campos para definir un rango";
+    errors.destinationPostalCodeStart = message;
+    errors.destinationPostalCodeEnd = message;
+    return { start: null, end: null };
+  }
+
+  if (!/^\d+$/.test(startValue)) {
+    errors.destinationPostalCodeStart =
+      "Introduce solo números en el código postal";
+  }
+
+  if (!/^\d+$/.test(endValue)) {
+    errors.destinationPostalCodeEnd =
+      "Introduce solo números en el código postal";
+  }
+
+  if (errors.destinationPostalCodeStart || errors.destinationPostalCodeEnd) {
+    return { start: null, end: null };
+  }
+
+  const startNumber = Number(startValue);
+  const endNumber = Number(endValue);
+
+  if (Number.isNaN(startNumber)) {
+    errors.destinationPostalCodeStart = "Introduce un código válido";
+  }
+
+  if (Number.isNaN(endNumber)) {
+    errors.destinationPostalCodeEnd = "Introduce un código válido";
+  }
+
+  if (errors.destinationPostalCodeStart || errors.destinationPostalCodeEnd) {
+    return { start: null, end: null };
+  }
+
+  if (startNumber > endNumber) {
+    const message =
+      "El código postal 'desde' debe ser menor o igual que 'hasta'";
+    errors.destinationPostalCodeStart = message;
+    errors.destinationPostalCodeEnd = message;
+    return { start: null, end: null };
+  }
+
+  return { start: startValue, end: endValue };
 };
 
 const buildRuleInput = (formData: FormData) => {
@@ -480,14 +618,27 @@ const buildRuleInput = (formData: FormData) => {
   const destinationProvince = sanitizeString(
     formData.get("destinationProvince"),
   )?.toUpperCase() ?? null;
-  const destinationPostalCode = sanitizeString(
-    formData.get("destinationPostalCode"),
-  )?.toUpperCase() ?? null;
+  const { start: destinationPostalCodeStart, end: destinationPostalCodeEnd } =
+    parsePostalCodeRange(formData, errors);
+
+  const combinable = parseCheckboxField(formData.get("combinable"));
+  const validFrom = parseDateField(formData.get("validFrom"), "validFrom", errors);
+  const validUntil = parseDateField(
+    formData.get("validUntil"),
+    "validUntil",
+    errors,
+  );
+
+  if (validFrom && validUntil && validFrom > validUntil) {
+    const message = "La fecha fin debe ser posterior o igual a la fecha inicio";
+    errors.validUntil = message;
+    errors.validFrom = message;
+  }
 
   const carrierServiceCode =
     sanitizeString(formData.get("carrierServiceCode")) ?? null;
 
-  const enabled = formData.get("enabled") === "on";
+  const enabled = parseCheckboxField(formData.get("enabled"));
 
   return {
     data:
@@ -502,7 +653,12 @@ const buildRuleInput = (formData: FormData) => {
             maxWeight,
             destinationCountry,
             destinationProvince,
-            destinationPostalCode,
+            destinationPostalCode: null,
+            destinationPostalCodeStart,
+            destinationPostalCodeEnd,
+            combinable,
+            validFrom,
+            validUntil,
             carrierServiceCode,
             enabled,
           }
@@ -611,8 +767,90 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       destinationCountry: rule.destinationCountry,
       destinationProvince: rule.destinationProvince,
       destinationPostalCode: rule.destinationPostalCode,
+      destinationPostalCodeStart: rule.destinationPostalCodeStart,
+      destinationPostalCodeEnd: rule.destinationPostalCodeEnd,
+      combinable: rule.combinable,
+      validFrom: rule.validFrom,
+      validUntil: rule.validUntil,
       carrierServiceCode: rule.carrierServiceCode,
       enabled,
+    });
+
+    return redirect(request.url);
+  }
+
+  if (intent === "bulkSetEnabled" || intent === "bulkSetCombinable") {
+    const ids = parseSelectedIds(formData.get("selectedIds"));
+    if (!ids.length) {
+      const payload: ActionData = {
+        formError: "Selecciona al menos una tarifa para aplicar la acción masiva",
+      };
+      return Response.json(payload, { status: 400 });
+    }
+
+    const value = formData.get("value") === "true";
+
+    if (intent === "bulkSetEnabled") {
+      await bulkSetRuleEnabled(ids, shopDomain, value);
+    } else {
+      await bulkSetRuleCombinable(ids, shopDomain, value);
+    }
+
+    return redirect(request.url);
+  }
+
+  if (intent === "bulkDelete") {
+    const ids = parseSelectedIds(formData.get("selectedIds"));
+    if (!ids.length) {
+      const payload: ActionData = {
+        formError: "Selecciona al menos una tarifa para eliminar",
+      };
+      return Response.json(payload, { status: 400 });
+    }
+
+    await bulkDeleteRules(ids, shopDomain);
+    return redirect(request.url);
+  }
+
+  if (intent === "toggleCombinable") {
+    const id = Number(formData.get("id"));
+    const combinableValue = formData.get("combinable");
+    const combinable =
+      typeof combinableValue === "string"
+        ? combinableValue.toLowerCase() === "true"
+        : false;
+
+    if (!Number.isInteger(id)) {
+      const payload: ActionData = {
+        formError: "Identificador de regla no válido",
+      };
+      return Response.json(payload, { status: 400 });
+    }
+
+    const rule = await getShippingRule(id, shopDomain);
+    if (!rule) {
+      const payload: ActionData = { formError: "No se ha encontrado la regla" };
+      return Response.json(payload, { status: 404 });
+    }
+
+    await updateShippingRule(id, shopDomain, {
+      title: rule.title,
+      rateName: rule.rateName,
+      rateAmountCents: rule.rateAmountCents,
+      minSubtotal: rule.minSubtotal,
+      maxSubtotal: rule.maxSubtotal,
+      minWeight: rule.minWeight,
+      maxWeight: rule.maxWeight,
+      destinationCountry: rule.destinationCountry,
+      destinationProvince: rule.destinationProvince,
+      destinationPostalCode: rule.destinationPostalCode,
+      destinationPostalCodeStart: rule.destinationPostalCodeStart,
+      destinationPostalCodeEnd: rule.destinationPostalCodeEnd,
+      combinable,
+      validFrom: rule.validFrom,
+      validUntil: rule.validUntil,
+      carrierServiceCode: rule.carrierServiceCode,
+      enabled: rule.enabled,
     });
 
     return redirect(request.url);
@@ -628,6 +866,42 @@ const formatAmount = (cents: number) =>
     maximumFractionDigits: 2,
   });
 
+const formatPostalRestriction = (rule: ShippingRuleDTO) => {
+  if (rule.destinationPostalCodeStart && rule.destinationPostalCodeEnd) {
+    if (rule.destinationPostalCodeStart === rule.destinationPostalCodeEnd) {
+      return `CP: ${rule.destinationPostalCodeStart}`;
+    }
+
+    return `CP: ${rule.destinationPostalCodeStart} - ${rule.destinationPostalCodeEnd}`;
+  }
+
+  if (rule.destinationPostalCode) {
+    return `CP (prefijo): ${rule.destinationPostalCode}`;
+  }
+
+  return null;
+};
+
+const formatValidityRange = (rule: ShippingRuleDTO) => {
+  if (!rule.validFrom && !rule.validUntil) {
+    return null;
+  }
+
+  const formatter = new Intl.DateTimeFormat("es-ES", { dateStyle: "short" });
+
+  if (rule.validFrom && rule.validUntil) {
+    return `Vigente del ${formatter.format(
+      rule.validFrom,
+    )} al ${formatter.format(rule.validUntil)}`;
+  }
+
+  if (rule.validFrom) {
+    return `Vigente desde ${formatter.format(rule.validFrom)}`;
+  }
+
+  return `Vigente hasta ${formatter.format(rule.validUntil!)}`;
+};
+
 export default function ShippingRulesPage() {
   const { rules } = useLoaderData<typeof loader>();
   const actionData = useActionData<ActionData>();
@@ -637,9 +911,16 @@ export default function ShippingRulesPage() {
   const [formValues, setFormValues] = useState<RuleFormValues>(() =>
     getFormValuesFromRule(null),
   );
+  const [shouldCloseAfterSubmit, setShouldCloseAfterSubmit] = useState(false);
   const [selectedGroupIndex, setSelectedGroupIndex] = useState(0);
+  const [selectedRuleIds, setSelectedRuleIds] = useState<Set<number>>(
+    () => new Set(),
+  );
+  const [searchQuery, setSearchQuery] = useState("");
   const deleteFetcher = useFetcher<typeof action>();
   const toggleFetcher = useFetcher<typeof action>();
+  const bulkFetcher = useFetcher<typeof action>();
+  const combinableFetcher = useFetcher<typeof action>();
   const countryOptions = useMemo(
     () => [
       {
@@ -655,6 +936,26 @@ export default function ShippingRulesPage() {
     [countryOptions],
   );
 
+  const handleSearchChange = useCallback((value: string, _id: string) => {
+    setSearchQuery(value);
+  }, []);
+
+  const normalizedSearchQuery = searchQuery.trim().toLowerCase();
+
+  const filteredRules = useMemo(() => {
+    if (!normalizedSearchQuery) {
+      return rules;
+    }
+
+    return rules.filter((rule) => {
+      const title = rule.title.toLowerCase();
+      const rateName = rule.rateName.toLowerCase();
+      return (
+        title.includes(normalizedSearchQuery) ||
+        rateName.includes(normalizedSearchQuery)
+      );
+    });
+  }, [rules, normalizedSearchQuery]);
   const handleTextFieldChange = useCallback(
     (field: RuleFormTextFieldKey) =>
       (value: string, _id: string) => {
@@ -666,33 +967,22 @@ export default function ShippingRulesPage() {
     [],
   );
 
-  const handleEnabledChange = useCallback(
-    (newChecked: boolean, _id: string) => {
-      setFormValues((prev) => ({
-        ...prev,
-        enabled: newChecked,
-      }));
-    },
-    [],
-  );
-
-  const isSubmitting = navigation.state === "submitting";
-
   const handleOpenModal = (rule: ShippingRuleDTO | null) => {
+    if (!rule && searchQuery) {
+      setSearchQuery("");
+    }
+
     setEditingRule(rule);
     setFormValues(getFormValuesFromRule(rule));
     setIsModalOpen(true);
   };
 
-  const handleCloseModal = () => {
+  const handleCloseModal = useCallback(() => {
+    setShouldCloseAfterSubmit(false);
     setEditingRule(null);
     setIsModalOpen(false);
     setFormValues(getFormValuesFromRule(null));
-  };
-
-  const hasErrors = Boolean(
-    actionData?.formError || Object.keys(actionData?.errors ?? {}).length,
-  );
+  }, []);
 
   const groupedRules = useMemo(() => {
     const groups = new Map<
@@ -700,7 +990,7 @@ export default function ShippingRulesPage() {
       { key: string; label: string; rules: ShippingRuleDTO[] }
     >();
 
-    rules.forEach((rule) => {
+    filteredRules.forEach((rule) => {
       const code = rule.destinationCountry?.toUpperCase() ?? "";
       const key = code || "__none__";
       const label = code
@@ -717,7 +1007,101 @@ export default function ShippingRulesPage() {
     return Array.from(groups.values()).sort((a, b) =>
       a.label.localeCompare(b.label, "es"),
     );
-  }, [rules, countryLabelMap]);
+  }, [filteredRules, countryLabelMap]);
+
+  const selectedIdsArray = useMemo(
+    () => Array.from(selectedRuleIds),
+    [selectedRuleIds],
+  );
+  const hasSelection = selectedIdsArray.length > 0;
+  const bulkSelectionValue = selectedIdsArray.join(",");
+
+  const filteredRuleIds = useMemo(
+    () => new Set(filteredRules.map((rule) => rule.id)),
+    [filteredRules],
+  );
+
+  const handleRuleSelectionChange = useCallback(
+    (ruleId: number, selected: boolean) => {
+      setSelectedRuleIds((prev) => {
+        const next = new Set(prev);
+        if (selected) {
+          next.add(ruleId);
+        } else {
+          next.delete(ruleId);
+        }
+        return next;
+      });
+    },
+    [],
+  );
+
+  const handleSelectAllVisible = useCallback(() => {
+    if (!groupedRules[selectedGroupIndex]) {
+      return;
+    }
+
+    setSelectedRuleIds((prev) => {
+      const next = new Set(prev);
+      groupedRules[selectedGroupIndex]?.rules.forEach((rule) =>
+        next.add(rule.id),
+      );
+      return next;
+    });
+  }, [groupedRules, selectedGroupIndex]);
+
+  const handleClearSelection = useCallback(() => {
+    setSelectedRuleIds(new Set());
+  }, []);
+
+  const isSubmitting = navigation.state === "submitting";
+
+  useEffect(() => {
+    if (!shouldCloseAfterSubmit) {
+      return;
+    }
+
+    if (navigation.state === "loading") {
+      handleCloseModal();
+    }
+  }, [handleCloseModal, navigation.state, shouldCloseAfterSubmit]);
+
+  useEffect(() => {
+    if (navigation.state === "loading" && hasSelection) {
+      setSelectedRuleIds(new Set());
+    }
+  }, [hasSelection, navigation.state]);
+
+  useEffect(() => {
+    setSelectedRuleIds((prev) => {
+      let changed = false;
+      const next = new Set<number>();
+      prev.forEach((id) => {
+        if (filteredRuleIds.has(id)) {
+          next.add(id);
+        } else {
+          changed = true;
+        }
+      });
+      return changed ? next : prev;
+    });
+  }, [filteredRuleIds]);
+
+  const hasErrors = Boolean(
+    actionData?.formError || Object.keys(actionData?.errors ?? {}).length,
+  );
+
+  const legacyPostalPrefix =
+    editingRule &&
+    editingRule.destinationPostalCode &&
+    !editingRule.destinationPostalCodeStart &&
+    !editingRule.destinationPostalCodeEnd
+      ? editingRule.destinationPostalCode
+      : null;
+
+  const postalRangeHelpText = legacyPostalPrefix
+    ? `La regla usaba el prefijo ${legacyPostalPrefix}. Define ahora el rango (usa el mismo número en ambos campos para un único código).`
+    : "Introduce el mismo número en ambos campos para un único código.";
 
   useEffect(() => {
     setSelectedGroupIndex((current) => {
@@ -744,6 +1128,77 @@ export default function ShippingRulesPage() {
   }, []);
 
   const selectedGroup = groupedRules[selectedGroupIndex] ?? null;
+  const bulkActionDisabled =
+    !hasSelection || bulkFetcher.state === "submitting";
+  const selectionCountLabel =
+    selectedIdsArray.length === 1
+      ? "1 tarifa seleccionada"
+      : `${selectedIdsArray.length} tarifas seleccionadas`;
+
+  const bulkActionsMarkup = hasSelection ? (
+    <Card>
+      <BlockStack gap="200">
+        <InlineStack align="space-between" blockAlign="center" gap="200">
+          <Text>{selectionCountLabel}</Text>
+          <InlineStack gap="200">
+            <Button
+              onClick={handleSelectAllVisible}
+              disabled={!selectedGroup || bulkFetcher.state === "submitting"}
+            >
+              Seleccionar grupo actual
+            </Button>
+            <Button onClick={handleClearSelection}>Limpiar selección</Button>
+          </InlineStack>
+        </InlineStack>
+        <InlineStack gap="200">
+          <bulkFetcher.Form method="post">
+            <input type="hidden" name="intent" value="bulkSetEnabled" />
+            <input type="hidden" name="selectedIds" value={bulkSelectionValue} />
+            <input type="hidden" name="value" value="true" />
+            <Button submit disabled={bulkActionDisabled}>
+              Activar seleccionadas
+            </Button>
+          </bulkFetcher.Form>
+          <bulkFetcher.Form method="post">
+            <input type="hidden" name="intent" value="bulkSetEnabled" />
+            <input type="hidden" name="selectedIds" value={bulkSelectionValue} />
+            <input type="hidden" name="value" value="false" />
+            <Button submit disabled={bulkActionDisabled}>
+              Desactivar seleccionadas
+            </Button>
+          </bulkFetcher.Form>
+          <bulkFetcher.Form method="post">
+            <input type="hidden" name="intent" value="bulkSetCombinable" />
+            <input type="hidden" name="selectedIds" value={bulkSelectionValue} />
+            <input type="hidden" name="value" value="true" />
+            <Button submit disabled={bulkActionDisabled}>
+              Marcar como combinables
+            </Button>
+          </bulkFetcher.Form>
+          <bulkFetcher.Form
+            method="post"
+            onSubmit={(event) => {
+              if (
+                !window.confirm(
+                  `¿Eliminar ${selectionCountLabel.toLowerCase()}? Esta acción es irreversible.`,
+                )
+              ) {
+                event.preventDefault();
+              }
+            }}
+          >
+            <input type="hidden" name="intent" value="bulkDelete" />
+            <input type="hidden" name="selectedIds" value={bulkSelectionValue} />
+            <Button submit tone="critical" disabled={bulkActionDisabled}>
+              Eliminar seleccionadas
+            </Button>
+          </bulkFetcher.Form>
+        </InlineStack>
+      </BlockStack>
+    </Card>
+  ) : null;
+
+  const noFilteredResults = filteredRules.length === 0;
 
   const emptyStateMarkup = (
     <EmptyState
@@ -770,9 +1225,19 @@ export default function ShippingRulesPage() {
           <Card key={rule.id}>
             <BlockStack gap="400">
               <InlineStack align="space-between" blockAlign="center">
-                <Text as="h3" variant="headingMd">
-                  {rule.title}
-                </Text>
+                <InlineStack gap="200" blockAlign="center">
+                  <Checkbox
+                    label="Seleccionar tarifa"
+                    labelHidden
+                    checked={selectedRuleIds.has(rule.id)}
+                    onChange={(checked) =>
+                      handleRuleSelectionChange(rule.id, checked)
+                    }
+                  />
+                  <Text as="h3" variant="headingMd">
+                    {rule.title}
+                  </Text>
+                </InlineStack>
                 <Badge tone={rule.enabled ? "success" : "critical"}>
                   {rule.enabled ? "Activa" : "Inactiva"}
                 </Badge>
@@ -832,9 +1297,9 @@ export default function ShippingRulesPage() {
                   rule.destinationProvince
                     ? `Provincia/Estado: ${rule.destinationProvince}`
                     : null,
-                  rule.destinationPostalCode
-                    ? `CP: ${rule.destinationPostalCode}`
-                    : null,
+                  formatPostalRestriction(rule),
+                  rule.combinable ? "Tarifa combinable" : "Tarifa no combinable",
+                  formatValidityRange(rule),
                 ]
                   .filter(Boolean)
                   .join(" · ") || "Sin restricciones"}
@@ -843,6 +1308,20 @@ export default function ShippingRulesPage() {
                 <Button onClick={() => handleOpenModal(rule)}>
                   Editar
                 </Button>
+                <combinableFetcher.Form method="post">
+                  <input type="hidden" name="intent" value="toggleCombinable" />
+                  <input type="hidden" name="id" value={rule.id} />
+                  <input
+                    type="hidden"
+                    name="combinable"
+                    value={String(!rule.combinable)}
+                  />
+                  <Button submit>
+                    {rule.combinable
+                      ? "Marcar como exclusiva"
+                      : "Marcar como combinable"}
+                  </Button>
+                </combinableFetcher.Form>
                 <toggleFetcher.Form method="post">
                   <input type="hidden" name="intent" value="toggle" />
                   <input type="hidden" name="id" value={rule.id} />
@@ -891,31 +1370,57 @@ export default function ShippingRulesPage() {
     >
       <Layout>
         <Layout.Section>
-          {rules.length === 0 ? (
-            emptyStateMarkup
-          ) : (
-            <BlockStack gap="400">
-              {tabs.length > 1 ? (
-                <Tabs
-                  tabs={tabs}
-                  selected={selectedGroupIndex}
-                  onSelect={handleTabChange}
-                />
-              ) : null}
-              {rulesMarkup
-                ? (
-                    <div
-                      id={
-                        tabs[selectedGroupIndex]?.panelID ??
-                        "country-panel-selected"
-                      }
-                    >
-                      {rulesMarkup}
-                    </div>
-                  )
-                : null}
-            </BlockStack>
-          )}
+        {rules.length === 0 ? (
+          emptyStateMarkup
+        ) : (
+          <BlockStack gap="400">
+            <TextField
+              label="Buscar tarifas"
+              labelHidden
+              value={searchQuery}
+              onChange={handleSearchChange}
+              placeholder="Buscar por nombre interno o visible"
+              autoComplete="off"
+            />
+            {noFilteredResults ? (
+              <Card>
+                <BlockStack gap="200">
+                  <Text>
+                    {searchQuery
+                      ? `No encontramos resultados para "${searchQuery}".`
+                      : "No hay tarifas para mostrar."}
+                  </Text>
+                  {searchQuery ? (
+                    <Button onClick={() => setSearchQuery("")}>
+                      Borrar búsqueda
+                    </Button>
+                  ) : null}
+                </BlockStack>
+              </Card>
+            ) : (
+              <>
+                {tabs.length > 1 ? (
+                  <Tabs
+                    tabs={tabs}
+                    selected={selectedGroupIndex}
+                    onSelect={handleTabChange}
+                  />
+                ) : null}
+                {bulkActionsMarkup}
+                {rulesMarkup ? (
+                  <div
+                    id={
+                      tabs[selectedGroupIndex]?.panelID ??
+                      "country-panel-selected"
+                    }
+                  >
+                    {rulesMarkup}
+                  </div>
+                ) : null}
+              </>
+            )}
+          </BlockStack>
+        )}
         </Layout.Section>
       </Layout>
       <Modal
@@ -928,11 +1433,12 @@ export default function ShippingRulesPage() {
           content: editingRule ? "Guardar cambios" : "Crear regla",
           onAction: () => {
             // This is a bit of a hack to submit the form from outside
-            const form = document.getElementById("rule-form");
+            const form = document.getElementById("rule-form") as
+              | HTMLFormElement
+              | null;
             if (form) {
-              form.dispatchEvent(
-                new Event("submit", { cancelable: true, bubbles: true }),
-              );
+              form.requestSubmit();
+              setShouldCloseAfterSubmit(true);
             }
           },
           loading: isSubmitting,
@@ -945,13 +1451,7 @@ export default function ShippingRulesPage() {
         ]}
       >
         <Modal.Section>
-          <Form
-            method="post"
-            id="rule-form"
-            onSubmit={() => {
-              handleCloseModal();
-            }}
-          >
+          <Form method="post" id="rule-form">
             <FormLayout>
               {actionData?.formError && (
                 <Banner tone="critical">{actionData.formError}</Banner>
@@ -1057,12 +1557,44 @@ export default function ShippingRulesPage() {
                   onChange={handleTextFieldChange("destinationProvince")}
                   autoComplete="off"
                 />
+              </FormLayout.Group>
+              <FormLayout.Group>
                 <TextField
-                  label="Código postal"
-                  name="destinationPostalCode"
-                  value={formValues.destinationPostalCode}
-                  onChange={handleTextFieldChange("destinationPostalCode")}
+                  label="Código postal desde"
+                  name="destinationPostalCodeStart"
+                  value={formValues.destinationPostalCodeStart}
+                  onChange={handleTextFieldChange("destinationPostalCodeStart")}
+                  error={actionData?.errors?.destinationPostalCodeStart}
+                  helpText={postalRangeHelpText}
+                  inputMode="numeric"
                   autoComplete="off"
+                />
+                <TextField
+                  label="Código postal hasta"
+                  name="destinationPostalCodeEnd"
+                  value={formValues.destinationPostalCodeEnd}
+                  onChange={handleTextFieldChange("destinationPostalCodeEnd")}
+                  error={actionData?.errors?.destinationPostalCodeEnd}
+                  inputMode="numeric"
+                  autoComplete="off"
+                />
+              </FormLayout.Group>
+              <FormLayout.Group>
+                <TextField
+                  label="Fecha inicio (opcional)"
+                  name="validFrom"
+                  type="date"
+                  value={formValues.validFrom}
+                  onChange={handleTextFieldChange("validFrom")}
+                  error={actionData?.errors?.validFrom}
+                />
+                <TextField
+                  label="Fecha fin (opcional)"
+                  name="validUntil"
+                  type="date"
+                  value={formValues.validUntil}
+                  onChange={handleTextFieldChange("validUntil")}
+                  error={actionData?.errors?.validUntil}
                 />
               </FormLayout.Group>
               <TextField
@@ -1073,11 +1605,15 @@ export default function ShippingRulesPage() {
                 placeholder="Opcional, visible en Shopify"
                 autoComplete="off"
               />
-              <Checkbox
-                label="Regla activa"
+              <input
+                type="hidden"
                 name="enabled"
-                checked={formValues.enabled}
-                onChange={handleEnabledChange}
+                value={String(formValues.enabled)}
+              />
+              <input
+                type="hidden"
+                name="combinable"
+                value={String(formValues.combinable)}
               />
               {hasErrors && (
                 <Banner tone="critical">

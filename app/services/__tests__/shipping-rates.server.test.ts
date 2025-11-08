@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { calculateCarrierRates } from "../shipping-rates.server";
 import type { ShippingRuleDTO } from "../../models/shipping-rule.server";
@@ -17,6 +17,11 @@ const baseRule: ShippingRuleDTO = {
   destinationCountry: null,
   destinationProvince: null,
   destinationPostalCode: null,
+  destinationPostalCodeStart: null,
+  destinationPostalCodeEnd: null,
+  combinable: false,
+  validFrom: null,
+  validUntil: null,
   carrierServiceCode: null,
   enabled: true,
   createdAt: new Date(),
@@ -100,6 +105,51 @@ describe("calculateCarrierRates", () => {
     expect(rates).toHaveLength(1);
   });
 
+  it("filtra por un rango de códigos postales", () => {
+    const rules: ShippingRuleDTO[] = [
+      {
+        ...baseRule,
+        destinationPostalCodeStart: "28000",
+        destinationPostalCodeEnd: "28999",
+      },
+    ];
+
+    const payload = buildPayload({ destination: { postal_code: "28350" } });
+    const rates = calculateCarrierRates(payload, rules);
+
+    expect(rates).toHaveLength(1);
+  });
+
+  it("permite un único código postal cuando desde y hasta son iguales", () => {
+    const rules: ShippingRuleDTO[] = [
+      {
+        ...baseRule,
+        destinationPostalCodeStart: "08012",
+        destinationPostalCodeEnd: "08012",
+      },
+    ];
+
+    const payload = buildPayload({ destination: { postal_code: "08012" } });
+    const rates = calculateCarrierRates(payload, rules);
+
+    expect(rates).toHaveLength(1);
+  });
+
+  it("descarta reglas cuando el código postal cae fuera del rango", () => {
+    const rules: ShippingRuleDTO[] = [
+      {
+        ...baseRule,
+        destinationPostalCodeStart: "28000",
+        destinationPostalCodeEnd: "28999",
+      },
+    ];
+
+    const payload = buildPayload({ destination: { postal_code: "29500" } });
+    const rates = calculateCarrierRates(payload, rules);
+
+    expect(rates).toHaveLength(0);
+  });
+
   it("normaliza el código postal y usa zip como alias", () => {
     const rules: ShippingRuleDTO[] = [
       {
@@ -116,6 +166,46 @@ describe("calculateCarrierRates", () => {
     expect(rates).toHaveLength(1);
   });
 
+  it("aplica reglas dentro del rango de fechas", () => {
+    const rules: ShippingRuleDTO[] = [
+      {
+        ...baseRule,
+        validFrom: new Date("2025-01-01T00:00:00Z"),
+        validUntil: new Date("2025-01-31T23:59:59Z"),
+      },
+    ];
+
+    const rates = calculateCarrierRates(buildPayload({}), rules);
+
+    expect(rates).toHaveLength(1);
+  });
+
+  it("descarta reglas que aún no han comenzado", () => {
+    const rules: ShippingRuleDTO[] = [
+      {
+        ...baseRule,
+        validFrom: new Date("2025-02-01T00:00:00Z"),
+      },
+    ];
+
+    const rates = calculateCarrierRates(buildPayload({}), rules);
+
+    expect(rates).toHaveLength(0);
+  });
+
+  it("descarta reglas caducadas", () => {
+    const rules: ShippingRuleDTO[] = [
+      {
+        ...baseRule,
+        validUntil: new Date("2024-12-31T23:59:59Z"),
+      },
+    ];
+
+    const rates = calculateCarrierRates(buildPayload({}), rules);
+
+    expect(rates).toHaveLength(0);
+  });
+
   it("descarta reglas desactivadas", () => {
     const rules: ShippingRuleDTO[] = [
       {
@@ -128,4 +218,62 @@ describe("calculateCarrierRates", () => {
 
     expect(rates).toHaveLength(0);
   });
+
+  it("devuelve múltiples reglas cuando todas son combinables", () => {
+    const rules: ShippingRuleDTO[] = [
+      {
+        ...baseRule,
+        id: 1,
+        title: "Combinable 1",
+        rateName: "C1",
+        combinable: true,
+      },
+      {
+        ...baseRule,
+        id: 2,
+        title: "Combinable 2",
+        rateName: "C2",
+        combinable: true,
+      },
+    ];
+
+    const rates = calculateCarrierRates(buildPayload({}), rules);
+
+    expect(rates).toHaveLength(2);
+    expect(rates.map((rate) => rate.service_name)).toEqual(["C1", "C2"]);
+  });
+
+  it("prioriza la primera regla no combinable", () => {
+    const rules: ShippingRuleDTO[] = [
+      {
+        ...baseRule,
+        id: 1,
+        title: "Exclusiva",
+        rateName: "Exclusiva",
+        combinable: false,
+      },
+      {
+        ...baseRule,
+        id: 2,
+        title: "Combinable",
+        rateName: "Combinable",
+        combinable: true,
+      },
+    ];
+
+    const rates = calculateCarrierRates(buildPayload({}), rules);
+
+    expect(rates).toHaveLength(1);
+    expect(rates[0].service_name).toBe("Exclusiva");
+  });
+});
+const FIXED_NOW = new Date("2025-01-15T00:00:00Z");
+
+beforeAll(() => {
+  vi.useFakeTimers();
+  vi.setSystemTime(FIXED_NOW);
+});
+
+afterAll(() => {
+  vi.useRealTimers();
 });

@@ -42,9 +42,14 @@ model ShippingRule {
   destinationCountry     String?
   destinationProvince    String?
   destinationPostalCode  String?
+  destinationPostalCodeStart String?
+  destinationPostalCodeEnd   String?
+  validFrom               DateTime?
+  validUntil              DateTime?
   rateName               String
   rateAmountCents        Int
   carrierServiceCode     String?
+  combinable             Boolean  @default(false)
   enabled                Boolean   @default(true)
   createdAt              DateTime  @default(now())
   updatedAt              DateTime  @updatedAt

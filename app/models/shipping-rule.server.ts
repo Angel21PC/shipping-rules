@@ -12,6 +12,11 @@ export type ShippingRuleInput = {
   destinationCountry?: string | null;
   destinationProvince?: string | null;
   destinationPostalCode?: string | null;
+  destinationPostalCodeStart?: string | null;
+  destinationPostalCodeEnd?: string | null;
+  combinable?: boolean;
+  validFrom?: Date | string | null;
+  validUntil?: Date | string | null;
   rateName: string;
   rateAmountCents: number;
   carrierServiceCode?: string | null;
@@ -68,9 +73,14 @@ export async function createShippingRule(
       destinationCountry: input.destinationCountry ?? null,
       destinationProvince: input.destinationProvince ?? null,
       destinationPostalCode: input.destinationPostalCode ?? null,
+      destinationPostalCodeStart: input.destinationPostalCodeStart ?? null,
+      destinationPostalCodeEnd: input.destinationPostalCodeEnd ?? null,
+      validFrom: input.validFrom ?? null,
+      validUntil: input.validUntil ?? null,
       rateName: input.rateName,
       rateAmountCents: input.rateAmountCents,
       carrierServiceCode: input.carrierServiceCode ?? null,
+      combinable: input.combinable ?? false,
       enabled: input.enabled ?? true,
     },
   });
@@ -103,9 +113,14 @@ export async function updateShippingRule(
       destinationCountry: input.destinationCountry ?? null,
       destinationProvince: input.destinationProvince ?? null,
       destinationPostalCode: input.destinationPostalCode ?? null,
+      destinationPostalCodeStart: input.destinationPostalCodeStart ?? null,
+      destinationPostalCodeEnd: input.destinationPostalCodeEnd ?? null,
+      validFrom: input.validFrom ?? null,
+      validUntil: input.validUntil ?? null,
       rateName: input.rateName,
       rateAmountCents: input.rateAmountCents,
       carrierServiceCode: input.carrierServiceCode ?? null,
+      combinable: input.combinable ?? false,
       enabled: input.enabled ?? true,
     },
   });
@@ -119,4 +134,55 @@ export async function deleteShippingRule(id: number, shopDomain: string) {
   });
 
   return deleted.count > 0;
+}
+
+const toIdArray = (ids: number[]) => ids.filter((id) => Number.isInteger(id));
+
+export async function bulkSetRuleEnabled(
+  ids: number[],
+  shopDomain: string,
+  enabled: boolean,
+) {
+  const validIds = toIdArray(ids);
+  if (!validIds.length) {
+    return 0;
+  }
+
+  const result = await prisma.shippingRule.updateMany({
+    where: { id: { in: validIds }, shopDomain },
+    data: { enabled },
+  });
+
+  return result.count;
+}
+
+export async function bulkSetRuleCombinable(
+  ids: number[],
+  shopDomain: string,
+  combinable: boolean,
+) {
+  const validIds = toIdArray(ids);
+  if (!validIds.length) {
+    return 0;
+  }
+
+  const result = await prisma.shippingRule.updateMany({
+    where: { id: { in: validIds }, shopDomain },
+    data: { combinable },
+  });
+
+  return result.count;
+}
+
+export async function bulkDeleteRules(ids: number[], shopDomain: string) {
+  const validIds = toIdArray(ids);
+  if (!validIds.length) {
+    return 0;
+  }
+
+  const result = await prisma.shippingRule.deleteMany({
+    where: { id: { in: validIds }, shopDomain },
+  });
+
+  return result.count;
 }

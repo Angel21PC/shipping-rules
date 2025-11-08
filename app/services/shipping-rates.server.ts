@@ -39,6 +39,7 @@ interface EvaluationContext {
   destinationCountry: string | null;
   destinationProvince: string | null;
   destinationPostalCode: string | null;
+  destinationPostalCodeNumber: number | null;
 }
 
 const gramsToKg = (grams: number) => grams / 1000;
@@ -55,6 +56,19 @@ const normalizePostalCode = (value?: string | null) => {
   }
 
   return trimmed.replace(/\s+/g, "").toUpperCase();
+};
+
+const postalCodeToNumber = (value: string | null) => {
+  if (!value) {
+    return null;
+  }
+
+  if (!/^\d+$/.test(value)) {
+    return null;
+  }
+
+  const parsed = Number(value);
+  return Number.isNaN(parsed) ? null : parsed;
 };
 
 export const buildEvaluationContext = (
@@ -82,6 +96,11 @@ export const buildEvaluationContext = (
         return total + itemGrams * quantity;
       }, 0);
 
+  const normalizedPostalCode =
+    normalizePostalCode(destination.postal_code) ??
+    normalizePostalCode(destination.zip) ??
+    null;
+
   return {
     subtotal,
     weightKg: gramsToKg(totalWeightGrams),
@@ -91,16 +110,15 @@ export const buildEvaluationContext = (
       destination.province_code?.toUpperCase() ??
       destination.province?.toUpperCase() ??
       null,
-    destinationPostalCode:
-      normalizePostalCode(destination.postal_code) ??
-      normalizePostalCode(destination.zip) ??
-      null,
+    destinationPostalCode: normalizedPostalCode,
+    destinationPostalCodeNumber: postalCodeToNumber(normalizedPostalCode),
   };
 };
 
 const matchesRule = (
   rule: ShippingRuleDTO,
   context: EvaluationContext,
+  evaluationTime: Date,
 ): boolean => {
   if (!rule.enabled) {
     return false;
@@ -136,7 +154,40 @@ const matchesRule = (
     return false;
   }
 
-  if (rule.destinationPostalCode) {
+  if (rule.validFrom && evaluationTime < rule.validFrom) {
+    return false;
+  }
+
+  if (rule.validUntil && evaluationTime > rule.validUntil) {
+    return false;
+  }
+
+  if (
+    (rule.destinationPostalCodeStart && !rule.destinationPostalCodeEnd) ||
+    (!rule.destinationPostalCodeStart && rule.destinationPostalCodeEnd)
+  ) {
+    return false;
+  }
+
+  if (rule.destinationPostalCodeStart && rule.destinationPostalCodeEnd) {
+    const rangeStart = postalCodeToNumber(rule.destinationPostalCodeStart);
+    const rangeEnd = postalCodeToNumber(rule.destinationPostalCodeEnd);
+
+    if (
+      rangeStart === null ||
+      rangeEnd === null ||
+      context.destinationPostalCodeNumber === null
+    ) {
+      return false;
+    }
+
+    if (
+      context.destinationPostalCodeNumber < rangeStart ||
+      context.destinationPostalCodeNumber > rangeEnd
+    ) {
+      return false;
+    }
+  } else if (rule.destinationPostalCode) {
     if (!context.destinationPostalCode) {
       return false;
     }
@@ -154,14 +205,22 @@ export const calculateCarrierRates = (
   rules: ShippingRuleDTO[],
 ): CarrierRate[] => {
   const context = buildEvaluationContext(payload);
+  const evaluationTime = new Date();
 
-  return rules
-    .filter((rule) => matchesRule(rule, context))
-    .map((rule) => ({
-      service_name: rule.rateName,
-      service_code: rule.carrierServiceCode ?? `custom-${rule.id}`,
-      total_price: rule.rateAmountCents.toString(),
-      currency: context.currency,
-      phone_required: false,
-    }));
+  const matchingRules = rules.filter((rule) =>
+    matchesRule(rule, context, evaluationTime),
+  );
+
+  const nonCombinableRule = matchingRules.find((rule) => !rule.combinable);
+  const applicableRules = nonCombinableRule
+    ? [nonCombinableRule]
+    : matchingRules;
+
+  return applicableRules.map((rule) => ({
+    service_name: rule.rateName,
+    service_code: rule.carrierServiceCode ?? `custom-${rule.id}`,
+    total_price: rule.rateAmountCents.toString(),
+    currency: context.currency,
+    phone_required: false,
+  }));
 };
