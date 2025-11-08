@@ -916,6 +916,7 @@ export default function ShippingRulesPage() {
   const [selectedRuleIds, setSelectedRuleIds] = useState<Set<number>>(
     () => new Set(),
   );
+  const [searchQuery, setSearchQuery] = useState("");
   const deleteFetcher = useFetcher<typeof action>();
   const toggleFetcher = useFetcher<typeof action>();
   const bulkFetcher = useFetcher<typeof action>();
@@ -935,6 +936,26 @@ export default function ShippingRulesPage() {
     [countryOptions],
   );
 
+  const handleSearchChange = useCallback((value: string, _id: string) => {
+    setSearchQuery(value);
+  }, []);
+
+  const normalizedSearchQuery = searchQuery.trim().toLowerCase();
+
+  const filteredRules = useMemo(() => {
+    if (!normalizedSearchQuery) {
+      return rules;
+    }
+
+    return rules.filter((rule) => {
+      const title = rule.title.toLowerCase();
+      const rateName = rule.rateName.toLowerCase();
+      return (
+        title.includes(normalizedSearchQuery) ||
+        rateName.includes(normalizedSearchQuery)
+      );
+    });
+  }, [rules, normalizedSearchQuery]);
   const handleTextFieldChange = useCallback(
     (field: RuleFormTextFieldKey) =>
       (value: string, _id: string) => {
@@ -965,7 +986,7 @@ export default function ShippingRulesPage() {
       { key: string; label: string; rules: ShippingRuleDTO[] }
     >();
 
-    rules.forEach((rule) => {
+    filteredRules.forEach((rule) => {
       const code = rule.destinationCountry?.toUpperCase() ?? "";
       const key = code || "__none__";
       const label = code
@@ -982,7 +1003,7 @@ export default function ShippingRulesPage() {
     return Array.from(groups.values()).sort((a, b) =>
       a.label.localeCompare(b.label, "es"),
     );
-  }, [rules, countryLabelMap]);
+  }, [filteredRules, countryLabelMap]);
 
   const selectedIdsArray = useMemo(
     () => Array.from(selectedRuleIds),
@@ -990,6 +1011,11 @@ export default function ShippingRulesPage() {
   );
   const hasSelection = selectedIdsArray.length > 0;
   const bulkSelectionValue = selectedIdsArray.join(",");
+
+  const filteredRuleIds = useMemo(
+    () => new Set(filteredRules.map((rule) => rule.id)),
+    [filteredRules],
+  );
 
   const handleRuleSelectionChange = useCallback(
     (ruleId: number, selected: boolean) => {
@@ -1041,6 +1067,21 @@ export default function ShippingRulesPage() {
       setSelectedRuleIds(new Set());
     }
   }, [hasSelection, navigation.state]);
+
+  useEffect(() => {
+    setSelectedRuleIds((prev) => {
+      let changed = false;
+      const next = new Set<number>();
+      prev.forEach((id) => {
+        if (filteredRuleIds.has(id)) {
+          next.add(id);
+        } else {
+          changed = true;
+        }
+      });
+      return changed ? next : prev;
+    });
+  }, [filteredRuleIds]);
 
   const hasErrors = Boolean(
     actionData?.formError || Object.keys(actionData?.errors ?? {}).length,
@@ -1152,6 +1193,8 @@ export default function ShippingRulesPage() {
       </BlockStack>
     </Card>
   ) : null;
+
+  const noFilteredResults = filteredRules.length === 0;
 
   const emptyStateMarkup = (
     <EmptyState
@@ -1323,32 +1366,57 @@ export default function ShippingRulesPage() {
     >
       <Layout>
         <Layout.Section>
-          {rules.length === 0 ? (
-            emptyStateMarkup
-          ) : (
-            <BlockStack gap="400">
-              {tabs.length > 1 ? (
-                <Tabs
-                  tabs={tabs}
-                  selected={selectedGroupIndex}
-                  onSelect={handleTabChange}
-                />
-              ) : null}
-              {bulkActionsMarkup}
-              {rulesMarkup
-                ? (
-                    <div
-                      id={
-                        tabs[selectedGroupIndex]?.panelID ??
-                        "country-panel-selected"
-                      }
-                    >
-                      {rulesMarkup}
-                    </div>
-                  )
-                : null}
-            </BlockStack>
-          )}
+        {rules.length === 0 ? (
+          emptyStateMarkup
+        ) : (
+          <BlockStack gap="400">
+            <TextField
+              label="Buscar tarifas"
+              labelHidden
+              value={searchQuery}
+              onChange={handleSearchChange}
+              placeholder="Buscar por nombre interno o visible"
+              autoComplete="off"
+            />
+            {noFilteredResults ? (
+              <Card>
+                <BlockStack gap="200">
+                  <Text>
+                    {searchQuery
+                      ? `No encontramos resultados para "${searchQuery}".`
+                      : "No hay tarifas para mostrar."}
+                  </Text>
+                  {searchQuery ? (
+                    <Button onClick={() => setSearchQuery("")}>
+                      Borrar búsqueda
+                    </Button>
+                  ) : null}
+                </BlockStack>
+              </Card>
+            ) : (
+              <>
+                {tabs.length > 1 ? (
+                  <Tabs
+                    tabs={tabs}
+                    selected={selectedGroupIndex}
+                    onSelect={handleTabChange}
+                  />
+                ) : null}
+                {bulkActionsMarkup}
+                {rulesMarkup ? (
+                  <div
+                    id={
+                      tabs[selectedGroupIndex]?.panelID ??
+                      "country-panel-selected"
+                    }
+                  >
+                    {rulesMarkup}
+                  </div>
+                ) : null}
+              </>
+            )}
+          </BlockStack>
+        )}
         </Layout.Section>
       </Layout>
       <Modal
