@@ -763,6 +763,50 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return redirect(request.url);
   }
 
+  if (intent === "toggleCombinable") {
+    const id = Number(formData.get("id"));
+    const combinableValue = formData.get("combinable");
+    const combinable =
+      typeof combinableValue === "string"
+        ? combinableValue.toLowerCase() === "true"
+        : false;
+
+    if (!Number.isInteger(id)) {
+      const payload: ActionData = {
+        formError: "Identificador de regla no válido",
+      };
+      return Response.json(payload, { status: 400 });
+    }
+
+    const rule = await getShippingRule(id, shopDomain);
+    if (!rule) {
+      const payload: ActionData = { formError: "No se ha encontrado la regla" };
+      return Response.json(payload, { status: 404 });
+    }
+
+    await updateShippingRule(id, shopDomain, {
+      title: rule.title,
+      rateName: rule.rateName,
+      rateAmountCents: rule.rateAmountCents,
+      minSubtotal: rule.minSubtotal,
+      maxSubtotal: rule.maxSubtotal,
+      minWeight: rule.minWeight,
+      maxWeight: rule.maxWeight,
+      destinationCountry: rule.destinationCountry,
+      destinationProvince: rule.destinationProvince,
+      destinationPostalCode: rule.destinationPostalCode,
+      destinationPostalCodeStart: rule.destinationPostalCodeStart,
+      destinationPostalCodeEnd: rule.destinationPostalCodeEnd,
+      combinable,
+      validFrom: rule.validFrom,
+      validUntil: rule.validUntil,
+      carrierServiceCode: rule.carrierServiceCode,
+      enabled: rule.enabled,
+    });
+
+    return redirect(request.url);
+  }
+
   const payload: ActionData = { formError: "Acción no soportada" };
   return Response.json(payload, { status: 400 });
 };
@@ -822,6 +866,7 @@ export default function ShippingRulesPage() {
   const [selectedGroupIndex, setSelectedGroupIndex] = useState(0);
   const deleteFetcher = useFetcher<typeof action>();
   const toggleFetcher = useFetcher<typeof action>();
+  const combinableFetcher = useFetcher<typeof action>();
   const countryOptions = useMemo(
     () => [
       {
@@ -1058,6 +1103,20 @@ export default function ShippingRulesPage() {
                 <Button onClick={() => handleOpenModal(rule)}>
                   Editar
                 </Button>
+                <combinableFetcher.Form method="post">
+                  <input type="hidden" name="intent" value="toggleCombinable" />
+                  <input type="hidden" name="id" value={rule.id} />
+                  <input
+                    type="hidden"
+                    name="combinable"
+                    value={String(!rule.combinable)}
+                  />
+                  <Button submit>
+                    {rule.combinable
+                      ? "Marcar como exclusiva"
+                      : "Marcar como combinable"}
+                  </Button>
+                </combinableFetcher.Form>
                 <toggleFetcher.Form method="post">
                   <input type="hidden" name="intent" value="toggle" />
                   <input type="hidden" name="id" value={rule.id} />
