@@ -868,18 +868,6 @@ export default function ShippingRulesPage() {
     [],
   );
 
-  const isSubmitting = navigation.state === "submitting";
-
-  useEffect(() => {
-    if (!shouldCloseAfterSubmit) {
-      return;
-    }
-
-    if (navigation.state === "loading") {
-      handleCloseModal();
-    }
-  }, [handleCloseModal, navigation.state, shouldCloseAfterSubmit]);
-
   const handleOpenModal = (rule: ShippingRuleDTO | null) => {
     setEditingRule(rule);
     setFormValues(getFormValuesFromRule(rule));
@@ -892,6 +880,18 @@ export default function ShippingRulesPage() {
     setIsModalOpen(false);
     setFormValues(getFormValuesFromRule(null));
   }, []);
+
+  const isSubmitting = navigation.state === "submitting";
+
+  useEffect(() => {
+    if (!shouldCloseAfterSubmit) {
+      return;
+    }
+
+    if (navigation.state === "loading") {
+      handleCloseModal();
+    }
+  }, [handleCloseModal, navigation.state, shouldCloseAfterSubmit]);
 
   const hasErrors = Boolean(
     actionData?.formError || Object.keys(actionData?.errors ?? {}).length,
