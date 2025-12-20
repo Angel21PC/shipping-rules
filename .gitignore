@@ -15,8 +15,8 @@ database.sqlite
 
 
 
-
-
+.gemini
+.mcp.json
 /extensions/*/dist
 
 # Ignore shopify files created during app dev

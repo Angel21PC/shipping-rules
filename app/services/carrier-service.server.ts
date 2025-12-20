@@ -1,6 +1,7 @@
 import type { Session } from "@shopify/shopify-api";
 import { ApiVersion } from "@shopify/shopify-app-react-router/server";
 
+//TODO: Move to config file
 const API_VERSION = ApiVersion.October25;
 const CARRIER_SERVICE_NAME = "Shipping Rules Carrier";
 const CARRIER_SERVICE_CODE = "SHIPPING_RULES";
@@ -14,9 +15,11 @@ type ShopifyCarrierService = {
   carrier_service_type?: string;
 };
 
+// Create URL
 const shopAdminUrl = (shop: string, path: string) =>
   `https://${shop}/admin/api/${API_VERSION}${path}`;
 
+// Headers
 const buildHeaders = (session: Session) => ({
   "Content-Type": "application/json",
   "X-Shopify-Access-Token": session.accessToken,
@@ -34,7 +37,8 @@ const getCallbackUrl = () => {
   return new URL(CALLBACK_PATH, appUrl).toString();
 };
 
-const fetchCarrierServices = async (session: Session) => {
+// Get Carrier Services
+const getCarrierServices = async (session: Session) => {
   const response = await fetch(
     shopAdminUrl(session.shop, "/carrier_services.json"),
     {
@@ -57,6 +61,7 @@ const fetchCarrierServices = async (session: Session) => {
   return payload.carrier_services ?? [];
 };
 
+// Create Carrier Service
 const createCarrierService = async (
   session: Session,
   callbackUrl: string,
@@ -121,9 +126,10 @@ const updateCarrierService = async (
   }
 };
 
+// Checks if the Carrier Service exists and updates it if necessary
 export const ensureCarrierService = async (session: Session) => {
   const callbackUrl = getCallbackUrl();
-  const services = await fetchCarrierServices(session);
+  const services = await getCarrierServices(session);
 
   const matchingService = services.find(
     (service) =>
