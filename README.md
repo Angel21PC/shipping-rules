@@ -1,19 +1,17 @@
-# Shopify App Template - React Router
+# Shipping Rules
 
-This is a template for building a [Shopify app](https://shopify.dev/docs/apps/getting-started) using [React Router](https://reactrouter.com/).  It was forked from the [Shopify Remix app template](https://github.com/Shopify/shopify-app-template-remix) and converted to React Router.
-
-Rather than cloning this repo, follow the [Quick Start steps](https://github.com/Shopify/shopify-app-template-react-router#quick-start).
-
-Visit the [`shopify.dev` documentation](https://shopify.dev/docs/api/shopify-app-react-router) for more details on the React Router app package.
-
-## Carrier Service de reglas de envío
-
-Este proyecto ahora incluye un Carrier Service personalizado que devuelve tarifas dinámicas en función de reglas configurables:
+Este proyecto permite configurar tarifas dinámicas en función de reglas configurables:
 
 - Condiciona por subtotal, peso total del carrito, destino (país, provincia y rangos de códigos postales), rango de fechas de vigencia y si la tarifa es combinable o exclusiva.
 - Gestiona las reglas desde la página principal de la app (`/app`) con capacidad de crear, editar, activar/desactivar y eliminar.
 - Expone un endpoint seguro en `/api/carrier` que Shopify utiliza al calcular el envío en checkout.
 - Registra o actualiza automáticamente el Carrier Service durante el hook `afterAuth` al instalar la app.
+
+### Probar las reglas
+
+1. Crea una o varias reglas desde la interfaz de la app.
+2. En la tienda de pruebas, añade productos al carrito y procede al checkout.
+3. Las tarifas que cumplan las condiciones aparecerán como métodos de envío con el nombre y precio definidos en cada regla.
 
 ### Configuración necesaria
 
@@ -21,11 +19,6 @@ Este proyecto ahora incluye un Carrier Service personalizado que devuelve tarifa
 2. Asegúrate de que `SHOPIFY_APP_URL` apunte a la URL pública (túnel o dominio) de tu app; el Carrier Service utilizará `<SHOPIFY_APP_URL>/api/carrier` como callback.
 3. Reinstala la app o fuerza un nuevo flujo de login para ejecutar el hook `afterAuth` y registrar el Carrier Service en la tienda.
 
-### Probar las reglas
-
-1. Crea una o varias reglas desde la interfaz de la app.
-2. En la tienda de pruebas, añade productos al carrito y procede al checkout.
-3. Las tarifas que cumplan las condiciones aparecerán como métodos de envío con el nombre y precio definidos en cada regla.
 
 ### Pruebas automáticas
 

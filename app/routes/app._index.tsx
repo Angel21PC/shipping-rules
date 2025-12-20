@@ -47,6 +47,7 @@ import {
 } from "../models/shipping-rule.server";
 import { ensureCarrierService } from "../services/carrier-service.server";
 
+//TODO: Move to types folder
 type LoaderData = {
   rules: ShippingRuleDTO[];
 };
@@ -80,6 +81,7 @@ type RuleFormTextFieldKey = Exclude<
   "enabled" | "combinable"
 >;
 
+//TODO: Move to config file
 const COUNTRY_CODES = [
   "AF",
   "AX",
@@ -351,6 +353,7 @@ const buildCountryOptions = () => {
 const formatDateInput = (value?: Date | null) =>
   value ? value.toISOString().slice(0, 10) : "";
 
+//TODO: Move to utils
 const getFormValuesFromRule = (
   rule: ShippingRuleDTO | null,
 ): RuleFormValues => ({
@@ -644,24 +647,24 @@ const buildRuleInput = (formData: FormData) => {
     data:
       !Object.keys(errors).length && rateAmountCents !== null && title && rateName
         ? {
-            title,
-            rateName,
-            rateAmountCents,
-            minSubtotal,
-            maxSubtotal,
-            minWeight,
-            maxWeight,
-            destinationCountry,
-            destinationProvince,
-            destinationPostalCode: null,
-            destinationPostalCodeStart,
-            destinationPostalCodeEnd,
-            combinable,
-            validFrom,
-            validUntil,
-            carrierServiceCode,
-            enabled,
-          }
+          title,
+          rateName,
+          rateAmountCents,
+          minSubtotal,
+          maxSubtotal,
+          minWeight,
+          maxWeight,
+          destinationCountry,
+          destinationProvince,
+          destinationPostalCode: null,
+          destinationPostalCodeStart,
+          destinationPostalCodeEnd,
+          combinable,
+          validFrom,
+          validUntil,
+          carrierServiceCode,
+          enabled,
+        }
         : null,
     errors,
   };
@@ -902,6 +905,7 @@ const formatValidityRange = (rule: ShippingRuleDTO) => {
   return `Vigente hasta ${formatter.format(rule.validUntil!)}`;
 };
 
+// TODO: Separate components and utils
 export default function ShippingRulesPage() {
   const { rules } = useLoaderData<typeof loader>();
   const actionData = useActionData<ActionData>();
@@ -1093,9 +1097,9 @@ export default function ShippingRulesPage() {
 
   const legacyPostalPrefix =
     editingRule &&
-    editingRule.destinationPostalCode &&
-    !editingRule.destinationPostalCodeStart &&
-    !editingRule.destinationPostalCodeEnd
+      editingRule.destinationPostalCode &&
+      !editingRule.destinationPostalCodeStart &&
+      !editingRule.destinationPostalCodeEnd
       ? editingRule.destinationPostalCode
       : null;
 
@@ -1250,49 +1254,42 @@ export default function ShippingRulesPage() {
                 Condiciones:{" "}
                 {[
                   rule.minSubtotal !== null || rule.maxSubtotal !== null
-                    ? `Subtotal ${
-                        rule.minSubtotal !== null
-                          ? `≥ ${rule.minSubtotal.toLocaleString("es-ES", {
-                              minimumFractionDigits: 2,
-                              maximumFractionDigits: 2,
-                            })}€`
-                          : ""
-                      }${
-                        rule.minSubtotal !== null &&
-                        rule.maxSubtotal !== null
-                          ? " y "
-                          : ""
-                      }${
-                        rule.maxSubtotal !== null
-                          ? `≤ ${rule.maxSubtotal.toLocaleString("es-ES", {
-                              minimumFractionDigits: 2,
-                              maximumFractionDigits: 2,
-                            })}€`
-                          : ""
-                      }`
+                    ? `Subtotal ${rule.minSubtotal !== null
+                      ? `≥ ${rule.minSubtotal.toLocaleString("es-ES", {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })}€`
+                      : ""
+                    }${rule.minSubtotal !== null &&
+                      rule.maxSubtotal !== null
+                      ? " y "
+                      : ""
+                    }${rule.maxSubtotal !== null
+                      ? `≤ ${rule.maxSubtotal.toLocaleString("es-ES", {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })}€`
+                      : ""
+                    }`
                     : null,
                   rule.minWeight !== null || rule.maxWeight !== null
-                    ? `Peso ${
-                        rule.minWeight !== null
-                          ? `≥ ${rule.minWeight} kg`
-                          : ""
-                      }${
-                        rule.minWeight !== null &&
-                        rule.maxWeight !== null
-                          ? " y "
-                          : ""
-                      }${
-                        rule.maxWeight !== null
-                          ? `≤ ${rule.maxWeight} kg`
-                          : ""
-                      }`
+                    ? `Peso ${rule.minWeight !== null
+                      ? `≥ ${rule.minWeight} kg`
+                      : ""
+                    }${rule.minWeight !== null &&
+                      rule.maxWeight !== null
+                      ? " y "
+                      : ""
+                    }${rule.maxWeight !== null
+                      ? `≤ ${rule.maxWeight} kg`
+                      : ""
+                    }`
                     : null,
                   rule.destinationCountry
-                    ? `País: ${
-                        countryLabelMap.get(
-                          rule.destinationCountry.toUpperCase(),
-                        ) ?? rule.destinationCountry
-                      }`
+                    ? `País: ${countryLabelMap.get(
+                      rule.destinationCountry.toUpperCase(),
+                    ) ?? rule.destinationCountry
+                    }`
                     : null,
                   rule.destinationProvince
                     ? `Provincia/Estado: ${rule.destinationProvince}`
@@ -1370,57 +1367,57 @@ export default function ShippingRulesPage() {
     >
       <Layout>
         <Layout.Section>
-        {rules.length === 0 ? (
-          emptyStateMarkup
-        ) : (
-          <BlockStack gap="400">
-            <TextField
-              label="Buscar tarifas"
-              labelHidden
-              value={searchQuery}
-              onChange={handleSearchChange}
-              placeholder="Buscar por nombre interno o visible"
-              autoComplete="off"
-            />
-            {noFilteredResults ? (
-              <Card>
-                <BlockStack gap="200">
-                  <Text>
-                    {searchQuery
-                      ? `No encontramos resultados para "${searchQuery}".`
-                      : "No hay tarifas para mostrar."}
-                  </Text>
-                  {searchQuery ? (
-                    <Button onClick={() => setSearchQuery("")}>
-                      Borrar búsqueda
-                    </Button>
+          {rules.length === 0 ? (
+            emptyStateMarkup
+          ) : (
+            <BlockStack gap="400">
+              <TextField
+                label="Buscar tarifas"
+                labelHidden
+                value={searchQuery}
+                onChange={handleSearchChange}
+                placeholder="Buscar por nombre interno o visible"
+                autoComplete="off"
+              />
+              {noFilteredResults ? (
+                <Card>
+                  <BlockStack gap="200">
+                    <Text>
+                      {searchQuery
+                        ? `No encontramos resultados para "${searchQuery}".`
+                        : "No hay tarifas para mostrar."}
+                    </Text>
+                    {searchQuery ? (
+                      <Button onClick={() => setSearchQuery("")}>
+                        Borrar búsqueda
+                      </Button>
+                    ) : null}
+                  </BlockStack>
+                </Card>
+              ) : (
+                <>
+                  {tabs.length > 1 ? (
+                    <Tabs
+                      tabs={tabs}
+                      selected={selectedGroupIndex}
+                      onSelect={handleTabChange}
+                    />
                   ) : null}
-                </BlockStack>
-              </Card>
-            ) : (
-              <>
-                {tabs.length > 1 ? (
-                  <Tabs
-                    tabs={tabs}
-                    selected={selectedGroupIndex}
-                    onSelect={handleTabChange}
-                  />
-                ) : null}
-                {bulkActionsMarkup}
-                {rulesMarkup ? (
-                  <div
-                    id={
-                      tabs[selectedGroupIndex]?.panelID ??
-                      "country-panel-selected"
-                    }
-                  >
-                    {rulesMarkup}
-                  </div>
-                ) : null}
-              </>
-            )}
-          </BlockStack>
-        )}
+                  {bulkActionsMarkup}
+                  {rulesMarkup ? (
+                    <div
+                      id={
+                        tabs[selectedGroupIndex]?.panelID ??
+                        "country-panel-selected"
+                      }
+                    >
+                      {rulesMarkup}
+                    </div>
+                  ) : null}
+                </>
+              )}
+            </BlockStack>
+          )}
         </Layout.Section>
       </Layout>
       <Modal

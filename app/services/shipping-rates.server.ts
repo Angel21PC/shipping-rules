@@ -42,6 +42,7 @@ interface EvaluationContext {
   destinationPostalCodeNumber: number | null;
 }
 
+// Helpers 
 const gramsToKg = (grams: number) => grams / 1000;
 
 const normalizePostalCode = (value?: string | null) => {
@@ -88,13 +89,13 @@ export const buildEvaluationContext = (
   const totalWeightGrams = hasValidTotalWeight
     ? payload.rate.total_weight!
     : (payload.rate.items ?? []).reduce((total, item) => {
-        const itemGrams = item.grams ?? 0;
-        const quantity = item.quantity ?? 1;
-        if (Number.isNaN(itemGrams) || Number.isNaN(quantity)) {
-          return total;
-        }
-        return total + itemGrams * quantity;
-      }, 0);
+      const itemGrams = item.grams ?? 0;
+      const quantity = item.quantity ?? 1;
+      if (Number.isNaN(itemGrams) || Number.isNaN(quantity)) {
+        return total;
+      }
+      return total + itemGrams * quantity;
+    }, 0);
 
   const normalizedPostalCode =
     normalizePostalCode(destination.postal_code) ??
@@ -200,6 +201,7 @@ const matchesRule = (
   return true;
 };
 
+// Calculate rates
 export const calculateCarrierRates = (
   payload: CarrierRatePayload,
   rules: ShippingRuleDTO[],
