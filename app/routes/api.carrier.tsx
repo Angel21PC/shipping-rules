@@ -72,6 +72,15 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
     const rates = calculateCarrierRates(payload, rules);
 
+    // TEMPORARY DEBUG: Add a rate showing the subtotal
+    rates.push({
+      service_name: `DEBUG: Subtotal ${payload.rate?.subtotal_price} ${payload.rate?.currency}`,
+      service_code: "debug-rate",
+      total_price: "0",
+      currency: payload.rate?.currency ?? "EUR",
+      phone_required: false
+    });
+
     console.log("Calculated Rates:", {
       count: rates.length,
       rates: rates.map(r => ({ code: r.service_code, price: r.total_price }))
