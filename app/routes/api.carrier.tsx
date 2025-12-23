@@ -60,7 +60,22 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   try {
     const rules = await listShippingRules(shopDomain);
+
+    // Debug logging
+    console.log("Carrier Service Request:", {
+      shopDomain,
+      payload_subtotal: payload.rate?.subtotal_price,
+      payload_currency: payload.rate?.currency,
+      subtotal_number: Number(payload.rate?.subtotal_price),
+      items_count: payload.rate?.items?.length
+    });
+
     const rates = calculateCarrierRates(payload, rules);
+
+    console.log("Calculated Rates:", {
+      count: rates.length,
+      rates: rates.map(r => ({ code: r.service_code, price: r.total_price }))
+    });
 
     return Response.json({ rates });
   } catch (error) {

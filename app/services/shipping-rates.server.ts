@@ -129,7 +129,7 @@ const matchesRule = (
     return false;
   }
 
-  if (rule.maxSubtotal !== null && context.subtotal > rule.maxSubtotal) {
+  if (rule.maxSubtotal !== null && context.subtotal >= rule.maxSubtotal) {
     return false;
   }
 
