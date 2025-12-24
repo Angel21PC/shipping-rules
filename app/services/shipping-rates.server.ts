@@ -20,8 +20,13 @@ export interface CarrierRatePayload {
     shipping_address?: CarrierRateAddress | null;
     items?: CarrierRateItem[];
     currency?: string;
-    subtotal_price?: string;
+    subtotal_price?: string | number | null;
     total_weight?: number | null;
+    order_totals?: {
+      subtotal_price?: number | null;
+      total_price?: number | null;
+      discount_amount?: number | null;
+    };
   };
 }
 
@@ -83,12 +88,17 @@ export const buildEvaluationContext = (
     ? Number(payload.rate.subtotal_price)
     : 0;
 
+  if (!subtotal && payload.rate.order_totals?.subtotal_price) {
+    subtotal = Number(payload.rate.order_totals.subtotal_price) / 100;
+  }
+
   if (!subtotal) {
-    subtotal = (payload.rate.items ?? []).reduce((total, item) => {
+    const subtotalCents = (payload.rate.items ?? []).reduce((total, item) => {
       const price = item.price ?? 0;
       const quantity = item.quantity ?? 1;
       return total + price * quantity;
     }, 0);
+    subtotal = subtotalCents / 100;
   }
 
   const hasValidTotalWeight =
