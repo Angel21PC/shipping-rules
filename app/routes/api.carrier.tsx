@@ -62,13 +62,13 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const rules = await listShippingRules(shopDomain);
 
     // Debug logging
-    console.log("Carrier Service Request:", {
+    console.error("[CARRIER-DEBUG] Carrier Service Request:", JSON.stringify({
       shopDomain,
       payload_subtotal: payload.rate?.subtotal_price,
       payload_currency: payload.rate?.currency,
       subtotal_number: Number(payload.rate?.subtotal_price),
       items_count: payload.rate?.items?.length
-    });
+    }, null, 2));
 
     const rates = calculateCarrierRates(payload, rules);
 
@@ -81,10 +81,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       phone_required: false
     });
 
-    console.log("Calculated Rates:", {
+    console.error("[CARRIER-DEBUG] Calculated Rates:", JSON.stringify({
       count: rates.length,
       rates: rates.map(r => ({ code: r.service_code, price: r.total_price }))
-    });
+    }, null, 2));
 
     return Response.json({ rates });
   } catch (error) {
