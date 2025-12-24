@@ -63,23 +63,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
     // Debug logging
     console.error("[CARRIER-DEBUG] Carrier Service Request:", JSON.stringify({
-      shopDomain,
-      payload_subtotal: payload.rate?.subtotal_price,
-      payload_currency: payload.rate?.currency,
-      subtotal_number: Number(payload.rate?.subtotal_price),
-      items_count: payload.rate?.items?.length
+      payload
     }, null, 2));
 
     const rates = calculateCarrierRates(payload, rules);
 
-    // TEMPORARY DEBUG: Add a rate showing the subtotal
-    rates.push({
-      service_name: `DEBUG: Subtotal ${payload.rate?.subtotal_price} ${payload.rate?.currency}`,
-      service_code: "debug-rate",
-      total_price: "0",
-      currency: payload.rate?.currency ?? "EUR",
-      phone_required: false
-    });
+
 
     console.error("[CARRIER-DEBUG] Calculated Rates:", JSON.stringify({
       count: rates.length,

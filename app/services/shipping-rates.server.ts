@@ -3,6 +3,7 @@ import type { ShippingRuleDTO } from "../models/shipping-rule.server";
 export interface CarrierRateItem {
   grams?: number | null;
   quantity?: number | null;
+  price?: number | null;
 }
 
 export interface CarrierRateAddress {
@@ -78,9 +79,17 @@ export const buildEvaluationContext = (
   const destination =
     payload.rate.destination ?? payload.rate.shipping_address ?? {};
 
-  const subtotal = payload.rate.subtotal_price
+  let subtotal = payload.rate.subtotal_price
     ? Number(payload.rate.subtotal_price)
     : 0;
+
+  if (!subtotal) {
+    subtotal = (payload.rate.items ?? []).reduce((total, item) => {
+      const price = item.price ?? 0;
+      const quantity = item.quantity ?? 1;
+      return total + price * quantity;
+    }, 0);
+  }
 
   const hasValidTotalWeight =
     typeof payload.rate.total_weight === "number" &&
