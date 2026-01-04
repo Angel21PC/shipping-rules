@@ -7,6 +7,11 @@ Este proyecto permite configurar tarifas dinámicas en función de reglas config
 - Expone un endpoint seguro en `/api/carrier` que Shopify utiliza al calcular el envío en checkout.
 - Registra o actualiza automáticamente el Carrier Service durante el hook `afterAuth` al instalar la app.
 
+# Notion
+
+Este Notion incluye videos y capturas de la aplicaccion funcionando.
+https://elemental-worm-87c.notion.site/Shipping-Rules-Shopify-App-2d2c25ac4ba580a59ae8df6f40ab2f47?source=copy_link
+
 ### Probar las reglas
 
 1. Crea una o varias reglas desde la interfaz de la app.
